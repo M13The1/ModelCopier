@@ -315,7 +315,7 @@
                                Foreground="{StaticResource SecondaryTextBrush}"
                                TextTrimming="CharacterEllipsis"
                                Margin="0,0,0,4"/>
-                    <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100"/>
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercentage, Mode=OneWay}"/>
                 </StackPanel>
 
                 <TextBlock Grid.Column="1"

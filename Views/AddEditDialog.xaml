@@ -2,10 +2,11 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="{Binding WindowTitle}"
-        Width="620" Height="380"
-        MinWidth="560" MinHeight="340"
+        Width="640" Height="400"
+        MinWidth="580" MinHeight="360"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResizeWithGrip"
+        FontFamily="Segoe UI"
         Background="{StaticResource AppBgBrush}">
 
     <Grid>
@@ -17,33 +18,49 @@
         </Grid.RowDefinitions>
 
         <!-- ── Title bar ──────────────────────────────────────────────── -->
-        <Border Grid.Row="0" Background="{StaticResource PrimaryDarkBrush}" Padding="20,14">
-            <TextBlock Text="{Binding WindowTitle}"
-                       FontSize="16" FontWeight="Bold"
-                       Foreground="White"/>
+        <Border Grid.Row="0"
+                Background="{StaticResource HeaderBgBrush}"
+                BorderBrush="{StaticResource BorderColorBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="22,14">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Width="26" Height="26"
+                        CornerRadius="6"
+                        Background="#091529"
+                        BorderBrush="{StaticResource AccentCyanBrush}"
+                        BorderThickness="1"
+                        Margin="0,0,10,0">
+                    <TextBlock Text="⚙" FontSize="14" Foreground="{StaticResource AccentCyanBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Text="{Binding WindowTitle}"
+                           FontSize="15" FontWeight="Bold"
+                           Foreground="{StaticResource AccentCyanBrush}"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
         </Border>
 
         <!-- ── Form ───────────────────────────────────────────────────── -->
-        <Grid Grid.Row="1" Margin="20,16,20,8">
+        <Grid Grid.Row="1" Margin="22,18,22,10">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="140"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="12"/>
+                <RowDefinition Height="14"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="12"/>
+                <RowDefinition Height="14"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="12"/>
+                <RowDefinition Height="14"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Model Name -->
             <StackPanel Grid.Row="0" Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="Model Name" Style="{StaticResource FieldLabelStyle}" Margin="0"/>
-                <TextBlock Text="(required)"  FontSize="9" Foreground="#90A4AE"/>
+                <TextBlock Text="(required)"  FontSize="9" Foreground="{StaticResource MutedTextBrush}"/>
             </StackPanel>
             <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
                      Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
@@ -52,73 +69,76 @@
             <!-- Source Folder -->
             <StackPanel Grid.Row="2" Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="Source Folder" Style="{StaticResource FieldLabelStyle}" Margin="0"/>
-                <TextBlock Text="(required)"    FontSize="9" Foreground="#90A4AE"/>
+                <TextBlock Text="(required)"    FontSize="9" Foreground="{StaticResource MutedTextBrush}"/>
             </StackPanel>
             <TextBox Grid.Row="2" Grid.Column="1"
                      Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"
                      ToolTip="Full path of the Tekla model folder to copy from"
-                     Margin="0,0,6,0"/>
+                     Margin="0,0,8,0"/>
             <Button Grid.Row="2" Grid.Column="2" Content="Browse…"
                     Command="{Binding BrowseSourceCommand}"
                     Style="{StaticResource SecondaryButtonStyle}"
+                    Padding="14,6"
                     VerticalAlignment="Stretch"/>
 
             <!-- Reserve Target -->
             <StackPanel Grid.Row="4" Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="Reserve Target" Style="{StaticResource FieldLabelStyle}" Margin="0"/>
-                <TextBlock Text="(Type 1)"       FontSize="9" Foreground="#90A4AE"/>
+                <TextBlock Text="(Type 1 Archive)" FontSize="9" Foreground="{StaticResource MutedTextBrush}"/>
             </StackPanel>
             <TextBox Grid.Row="4" Grid.Column="1"
                      Text="{Binding ReserveTargetPath, UpdateSourceTrigger=PropertyChanged}"
                      ToolTip="Root folder where Reserve (Type 1) backups will be placed"
-                     Margin="0,0,6,0"/>
+                     Margin="0,0,8,0"/>
             <Button Grid.Row="4" Grid.Column="2" Content="Browse…"
                     Command="{Binding BrowseReserveCommand}"
                     Style="{StaticResource SecondaryButtonStyle}"
+                    Padding="14,6"
                     VerticalAlignment="Stretch"/>
 
             <!-- Checker Target -->
             <StackPanel Grid.Row="6" Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="Checker Target" Style="{StaticResource FieldLabelStyle}" Margin="0"/>
-                <TextBlock Text="(Type 2)"       FontSize="9" Foreground="#90A4AE"/>
+                <TextBlock Text="(Type 2 Verification)" FontSize="9" Foreground="{StaticResource MutedTextBrush}"/>
             </StackPanel>
             <TextBox Grid.Row="6" Grid.Column="1"
                      Text="{Binding CheckerTargetPath, UpdateSourceTrigger=PropertyChanged}"
                      ToolTip="Root folder where Checker (Type 2) backups will be placed"
-                     Margin="0,0,6,0"/>
+                     Margin="0,0,8,0"/>
             <Button Grid.Row="6" Grid.Column="2" Content="Browse…"
                     Command="{Binding BrowseCheckerCommand}"
                     Style="{StaticResource SecondaryButtonStyle}"
+                    Padding="14,6"
                     VerticalAlignment="Stretch"/>
         </Grid>
 
         <!-- ── Validation error ───────────────────────────────────────── -->
         <Border Grid.Row="2"
-                Background="#FFF3E0"
-                BorderBrush="#FF6F00"
-                BorderThickness="0,0,0,0"
-                CornerRadius="4"
-                Margin="20,0,20,6"
-                Padding="10,6"
+                Background="{StaticResource DangerBgBrush}"
+                BorderBrush="{StaticResource DangerBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Margin="22,0,22,8"
+                Padding="12,8"
                 Visibility="{Binding IsValidationErrorVisible, Converter={StaticResource BoolToVisibility}}">
             <TextBlock Text="{Binding ValidationError}"
-                       Foreground="#E65100"
-                       FontSize="12"
+                       Foreground="{StaticResource DangerBrush}"
+                       FontSize="11"
                        TextWrapping="Wrap"/>
         </Border>
 
         <!-- ── Dialog buttons ─────────────────────────────────────────── -->
         <Border Grid.Row="3"
-                Background="{StaticResource ToolbarBgBrush}"
+                Background="{StaticResource HeaderBgBrush}"
                 BorderBrush="{StaticResource BorderColorBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="20,10">
+                Padding="22,12">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Cancel"
                         Click="OnCancel"
                         Style="{StaticResource SecondaryButtonStyle}"
                         Width="90"
-                        Margin="0,0,8,0"/>
+                        Margin="0,0,10,0"/>
                 <Button Content="OK"
                         Click="OnOk"
                         Style="{StaticResource PrimaryButtonStyle}"

@@ -51,6 +51,31 @@ namespace ModelCopier.ViewModels
                                            && (CreateReserveBackup || CreateCheckerBackup)
                                            && IsNotBusy);
             CancelBackupCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsBusy);
+
+            SelectDualBackupCommand = new RelayCommand(_ =>
+            {
+                CreateReserveBackup = true;
+                CreateCheckerBackup = true;
+                StatusMessage = "Dual replication mode active (Reserve + Checker).";
+            });
+            SelectReserveOnlyCommand = new RelayCommand(_ =>
+            {
+                CreateReserveBackup = true;
+                CreateCheckerBackup = false;
+                StatusMessage = "Single replication mode active (Reserve Type 1 only).";
+            });
+            SelectCheckerOnlyCommand = new RelayCommand(_ =>
+            {
+                CreateReserveBackup = false;
+                CreateCheckerBackup = true;
+                StatusMessage = "Single replication mode active (Checker Type 2 only).";
+            });
+            OpenConfigFileCommand = new RelayCommand(_ => OpenFileOrFolder(_configService.ConfigPath));
+            OpenSourceFolderCommand = new RelayCommand(_ =>
+            {
+                if (SelectedModel != null && Directory.Exists(SelectedModel.SourcePath))
+                    OpenFileOrFolder(SelectedModel.SourcePath);
+            }, _ => SelectedModel != null && !string.IsNullOrWhiteSpace(SelectedModel.SourcePath));
         }
 
         // ── Observable list ──────────────────────────────────────────────
@@ -134,11 +159,32 @@ namespace ModelCopier.ViewModels
 
         // ── Commands ─────────────────────────────────────────────────────
 
-        public ICommand AddCommand          { get; }
-        public ICommand EditCommand         { get; }
-        public ICommand DeleteCommand       { get; }
-        public ICommand CreateBackupCommand { get; }
-        public ICommand CancelBackupCommand { get; }
+        public ICommand AddCommand               { get; }
+        public ICommand EditCommand              { get; }
+        public ICommand DeleteCommand            { get; }
+        public ICommand CreateBackupCommand      { get; }
+        public ICommand CancelBackupCommand      { get; }
+        public ICommand SelectDualBackupCommand  { get; }
+        public ICommand SelectReserveOnlyCommand { get; }
+        public ICommand SelectCheckerOnlyCommand { get; }
+        public ICommand OpenConfigFileCommand    { get; }
+        public ICommand OpenSourceFolderCommand  { get; }
+
+        private static void OpenFileOrFolder(string path)
+        {
+            try
+            {
+                if (File.Exists(path) || Directory.Exists(path))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = path,
+                        UseShellExecute = true
+                    });
+                }
+            }
+            catch { }
+        }
 
         // ── CRUD handlers ────────────────────────────────────────────────
 

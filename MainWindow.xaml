@@ -1,0 +1,350 @@
+<Window x:Class="ModelCopier.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:ModelCopier.ViewModels"
+        Title="Tekla Model Copier"
+        Width="1120" Height="700"
+        MinWidth="860" MinHeight="520"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource AppBgBrush}">
+
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="54"/>   <!-- header      -->
+            <RowDefinition Height="*"/>    <!-- content      -->
+            <RowDefinition Height="Auto"/> <!-- progress bar -->
+            <RowDefinition Height="26"/>   <!-- status bar   -->
+        </Grid.RowDefinitions>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             HEADER
+        ════════════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0" Background="{StaticResource PrimaryDarkBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                            Margin="18,0">
+                    <TextBlock Text="⚙" FontSize="22" Foreground="White" Margin="0,0,10,0"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="Tekla Model Copier"
+                               FontSize="20" FontWeight="Bold"
+                               Foreground="White" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ConfigFilePath, StringFormat='Config: {0}'}"
+                           FontSize="10" Foreground="#90CAF9"
+                           VerticalAlignment="Center"
+                           Margin="0,0,16,0"
+                           ToolTip="{Binding ConfigFilePath}"/>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             CONTENT  (left list | splitter | right detail)
+        ════════════════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"   MinWidth="340"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="310" MinWidth="280"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ─────────────────────────────────────────────────────────
+                 LEFT: Model list + toolbar
+            ──────────────────────────────────────────────────────────── -->
+            <Border Grid.Column="0"
+                    Background="White"
+                    Margin="8,8,0,8"
+                    CornerRadius="6"
+                    BorderBrush="{StaticResource BorderColorBrush}"
+                    BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Toolbar -->
+                    <Border Grid.Row="0"
+                            Background="{StaticResource ToolbarBgBrush}"
+                            BorderBrush="{StaticResource BorderColorBrush}"
+                            BorderThickness="0,0,0,1"
+                            CornerRadius="6,6,0,0">
+                        <DockPanel Margin="10,8" LastChildFill="False">
+                            <TextBlock DockPanel.Dock="Left"
+                                       Text="TEKLA MODELS"
+                                       FontSize="10" FontWeight="Bold"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       VerticalAlignment="Center"
+                                       Margin="2,0,16,0"/>
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                                <Button Content="＋ Add"
+                                        Command="{Binding AddCommand}"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        IsEnabled="{Binding IsNotBusy}"
+                                        ToolTip="Add a new model entry"
+                                        Margin="0,0,4,0"/>
+                                <Button Content="✎ Edit"
+                                        Command="{Binding EditCommand}"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        ToolTip="Edit the selected entry"
+                                        Margin="0,0,4,0"/>
+                                <Button Content="✗ Remove"
+                                        Command="{Binding DeleteCommand}"
+                                        Style="{StaticResource DangerButtonStyle}"
+                                        ToolTip="Remove the selected entry from the list (files are NOT deleted)"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- DataGrid -->
+                    <DataGrid Grid.Row="1"
+                              ItemsSource="{Binding Models}"
+                              SelectedItem="{Binding SelectedModel, Mode=TwoWay}"
+                              RowStyle="{StaticResource DataGridRowStyle}"
+                              CellStyle="{StaticResource DataGridCellStyle}"
+                              BorderThickness="0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Model Name"
+                                                Binding="{Binding Name}"
+                                                Width="*"
+                                                MinWidth="120">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Padding"     Value="10,7"/>
+                                        <Setter Property="FontWeight"  Value="SemiBold"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn Header="Source Path"
+                                                Binding="{Binding SourcePath}"
+                                                Width="2*"
+                                                MinWidth="140">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Padding"         Value="10,7"/>
+                                        <Setter Property="TextTrimming"    Value="CharacterEllipsis"/>
+                                        <Setter Property="ToolTip"         Value="{Binding SourcePath}"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn Header="Last Reserve"
+                                                Binding="{Binding LastReserveBackupDisplay}"
+                                                Width="128">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Padding"    Value="10,7"/>
+                                        <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn Header="Last Checker"
+                                                Binding="{Binding LastCheckerBackupDisplay}"
+                                                Width="128">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Padding"    Value="10,7"/>
+                                        <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+
+            <!-- GridSplitter -->
+            <GridSplitter Grid.Column="1"
+                          Width="5"
+                          HorizontalAlignment="Stretch"
+                          Background="{StaticResource BorderColorBrush}"
+                          Cursor="SizeWE"/>
+
+            <!-- ─────────────────────────────────────────────────────────
+                 RIGHT: Detail panel
+            ──────────────────────────────────────────────────────────── -->
+            <Border Grid.Column="2"
+                    Background="White"
+                    Margin="0,8,8,8"
+                    CornerRadius="6"
+                    BorderBrush="{StaticResource BorderColorBrush}"
+                    BorderThickness="1">
+
+                <!-- Grid allows two Visibility-toggled panels to coexist inside one Border -->
+                <Grid>
+                    <!-- Show this when nothing is selected -->
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Visibility="{Binding SelectedModel,
+                                             Converter={StaticResource NullToVisibilityInverse}}">
+                        <TextBlock Text="📋" FontSize="44"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="Select a model from the list"
+                                   FontSize="12"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,8,0,2"/>
+                        <TextBlock Text="to view details and create a backup."
+                                   FontSize="12"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Show this when a model IS selected -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding SelectedModel,
+                                               Converter={StaticResource NullToVisibility}}">
+                    <StackPanel Margin="16,14">
+
+                        <!-- Model name -->
+                        <TextBlock Text="{Binding SelectedModel.Name}"
+                                   FontSize="16" FontWeight="Bold"
+                                   Foreground="{StaticResource PrimaryDarkBrush}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,14"/>
+
+                        <!-- Paths -->
+                        <TextBlock Text="SOURCE FOLDER"
+                                   Style="{StaticResource FieldLabelStyle}"/>
+                        <TextBlock Text="{Binding SelectedModel.SourcePath, TargetNullValue='(not set)'}"
+                                   Style="{StaticResource FieldValueStyle}"
+                                   ToolTip="{Binding SelectedModel.SourcePath}"/>
+
+                        <TextBlock Text="RESERVE TARGET  (Type 1)"
+                                   Style="{StaticResource FieldLabelStyle}"/>
+                        <TextBlock Text="{Binding SelectedModel.ReserveTargetPath, TargetNullValue='(not set)'}"
+                                   Style="{StaticResource FieldValueStyle}"
+                                   ToolTip="{Binding SelectedModel.ReserveTargetPath}"/>
+
+                        <TextBlock Text="CHECKER TARGET  (Type 2)"
+                                   Style="{StaticResource FieldLabelStyle}"/>
+                        <TextBlock Text="{Binding SelectedModel.CheckerTargetPath, TargetNullValue='(not set)'}"
+                                   Style="{StaticResource FieldValueStyle}"
+                                   ToolTip="{Binding SelectedModel.CheckerTargetPath}"/>
+
+                        <!-- Last backup dates (two columns) -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="LAST RESERVE"
+                                           Style="{StaticResource FieldLabelStyle}"/>
+                                <TextBlock Text="{Binding SelectedModel.LastReserveBackupDisplay}"
+                                           FontSize="11"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           Margin="0,0,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="LAST CHECKER"
+                                           Style="{StaticResource FieldLabelStyle}"/>
+                                <TextBlock Text="{Binding SelectedModel.LastCheckerBackupDisplay}"
+                                           FontSize="11"
+                                           Foreground="{StaticResource SecondaryTextBrush}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Separator Margin="0,10"/>
+
+                        <!-- Backup type checkboxes -->
+                        <TextBlock Text="BACKUP TYPE"
+                                   Style="{StaticResource FieldLabelStyle}"
+                                   Margin="0,0,0,6"/>
+
+                        <Border Background="#F8FAFC"
+                                BorderBrush="{StaticResource BorderColorBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="12,8">
+                            <StackPanel>
+                                <CheckBox Content="🗄   Reserve Backup  (Type 1)"
+                                          IsChecked="{Binding CreateReserveBackup}"
+                                          IsEnabled="{Binding IsNotBusy}"/>
+                                <CheckBox Content="✅  Checker Backup  (Type 2)"
+                                          IsChecked="{Binding CreateCheckerBackup}"
+                                          IsEnabled="{Binding IsNotBusy}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Create Backup button -->
+                        <Button Content="▶   Create Backup"
+                                Command="{Binding CreateBackupCommand}"
+                                Style="{StaticResource CreateBackupButtonStyle}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,12,0,0"/>
+
+                    </StackPanel>
+                </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             PROGRESS BAR (visible only when IsBusy)
+        ════════════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="2"
+                Background="White"
+                Margin="8,0,8,4"
+                CornerRadius="6"
+                BorderBrush="{StaticResource BorderColorBrush}"
+                BorderThickness="1"
+                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}">
+            <Grid Margin="14,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="52"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{Binding ProgressText}"
+                               FontSize="11"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,0,0,4"/>
+                    <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ProgressPercentage, StringFormat='{}{0:F0}%'}"
+                           FontSize="13" FontWeight="Bold"
+                           Foreground="{StaticResource PrimaryBrush}"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+
+                <Button Grid.Column="2"
+                        Content="⏹  Cancel"
+                        Command="{Binding CancelBackupCommand}"
+                        Style="{StaticResource DangerButtonStyle}"
+                        VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             STATUS BAR
+        ════════════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="3"
+                Background="#E3F2FD"
+                BorderBrush="{StaticResource BorderColorBrush}"
+                BorderThickness="0,1,0,0">
+            <TextBlock Text="{Binding StatusMessage}"
+                       FontSize="11"
+                       Foreground="{StaticResource PrimaryDarkBrush}"
+                       VerticalAlignment="Center"
+                       Margin="12,0"/>
+        </Border>
+    </Grid>
+</Window>

@@ -16,8 +16,11 @@ namespace ModelCopier.ViewModels
         private string _sourcePath         = string.Empty;
         private string _reserveTargetPath   = string.Empty;
         private string _checkerTargetPath   = string.Empty;
+        private string _incrementalTargetPath = string.Empty;
         private bool   _includeBakFiles     = false;
         private string _targetFolderSuffix  = string.Empty;
+        private bool   _enableAutoBackup    = false;
+        private bool   _enableIncrementalBackup = false;
         private string _validationError    = string.Empty;
 
         // ── Constructors ─────────────────────────────────────────────────
@@ -32,13 +35,16 @@ namespace ModelCopier.ViewModels
         /// <summary>Pre-populates fields from an existing entry (Edit mode).</summary>
         public AddEditViewModel(ModelEntry entry)
         {
-            _name               = entry.Name;
-            _sourcePath         = entry.SourcePath;
-            _reserveTargetPath   = entry.ReserveTargetPath;
-            _checkerTargetPath   = entry.CheckerTargetPath;
-            _includeBakFiles     = entry.IncludeBakFiles;
-            _targetFolderSuffix  = entry.TargetFolderSuffix;
-            IsEditMode          = true;
+            _name                 = entry.Name;
+            _sourcePath           = entry.SourcePath;
+            _reserveTargetPath     = entry.ReserveTargetPath;
+            _checkerTargetPath     = entry.CheckerTargetPath;
+            _incrementalTargetPath = entry.IncrementalTargetPath;
+            _includeBakFiles       = entry.IncludeBakFiles;
+            _targetFolderSuffix    = entry.TargetFolderSuffix;
+            _enableAutoBackup      = entry.EnableAutoBackup;
+            _enableIncrementalBackup = entry.EnableIncrementalBackup;
+            IsEditMode            = true;
             InitCommands();
         }
 
@@ -72,6 +78,12 @@ namespace ModelCopier.ViewModels
             set => SetField(ref _checkerTargetPath, value);
         }
 
+        public string IncrementalTargetPath
+        {
+            get => _incrementalTargetPath;
+            set => SetField(ref _incrementalTargetPath, value);
+        }
+
         public bool IncludeBakFiles
         {
             get => _includeBakFiles;
@@ -82,6 +94,18 @@ namespace ModelCopier.ViewModels
         {
             get => _targetFolderSuffix;
             set => SetField(ref _targetFolderSuffix, value);
+        }
+
+        public bool EnableAutoBackup
+        {
+            get => _enableAutoBackup;
+            set => SetField(ref _enableAutoBackup, value);
+        }
+
+        public bool EnableIncrementalBackup
+        {
+            get => _enableIncrementalBackup;
+            set => SetField(ref _enableIncrementalBackup, value);
         }
 
         public string ValidationError
@@ -98,9 +122,10 @@ namespace ModelCopier.ViewModels
 
         // ── Commands ─────────────────────────────────────────────────────
 
-        public ICommand BrowseSourceCommand  { get; private set; } = null!;
-        public ICommand BrowseReserveCommand { get; private set; } = null!;
-        public ICommand BrowseCheckerCommand { get; private set; } = null!;
+        public ICommand BrowseSourceCommand      { get; private set; } = null!;
+        public ICommand BrowseReserveCommand     { get; private set; } = null!;
+        public ICommand BrowseCheckerCommand     { get; private set; } = null!;
+        public ICommand BrowseIncrementalCommand { get; private set; } = null!;
 
         private void InitCommands()
         {
@@ -120,6 +145,12 @@ namespace ModelCopier.ViewModels
             {
                 string? path = BrowseFolder("Select Checker Backup Target Folder");
                 if (path != null) CheckerTargetPath = path;
+            });
+
+            BrowseIncrementalCommand = new RelayCommand(_ =>
+            {
+                string? path = BrowseFolder("Select Incremental Backup Target Folder");
+                if (path != null) IncrementalTargetPath = path;
             });
         }
 
@@ -147,9 +178,10 @@ namespace ModelCopier.ViewModels
             }
 
             if (string.IsNullOrWhiteSpace(ReserveTargetPath) &&
-                string.IsNullOrWhiteSpace(CheckerTargetPath))
+                string.IsNullOrWhiteSpace(CheckerTargetPath) &&
+                string.IsNullOrWhiteSpace(IncrementalTargetPath))
             {
-                ValidationError = "At least one target path (Reserve or Checker) must be specified.";
+                ValidationError = "At least one target path (Reserve, Checker, or Incremental) must be specified.";
                 return false;
             }
 
@@ -163,13 +195,16 @@ namespace ModelCopier.ViewModels
         /// </summary>
         public ModelEntry ToModelEntry(string? existingId = null) => new()
         {
-            Id                 = existingId ?? Guid.NewGuid().ToString(),
-            Name               = Name.Trim(),
-            SourcePath         = SourcePath.Trim(),
-            ReserveTargetPath  = ReserveTargetPath.Trim(),
-            CheckerTargetPath  = CheckerTargetPath.Trim(),
-            IncludeBakFiles    = IncludeBakFiles,
-            TargetFolderSuffix = TargetFolderSuffix?.Trim() ?? string.Empty
+            Id                    = existingId ?? Guid.NewGuid().ToString(),
+            Name                  = Name.Trim(),
+            SourcePath            = SourcePath.Trim(),
+            ReserveTargetPath     = ReserveTargetPath.Trim(),
+            CheckerTargetPath     = CheckerTargetPath.Trim(),
+            IncrementalTargetPath = IncrementalTargetPath?.Trim() ?? string.Empty,
+            IncludeBakFiles       = IncludeBakFiles,
+            TargetFolderSuffix    = TargetFolderSuffix?.Trim() ?? string.Empty,
+            EnableAutoBackup      = EnableAutoBackup,
+            EnableIncrementalBackup = EnableIncrementalBackup
         };
     }
 }

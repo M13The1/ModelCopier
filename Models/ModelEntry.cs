@@ -17,10 +17,14 @@ namespace ModelCopier.Models
         private string _sourcePath = string.Empty;
         private string _reserveTargetPath = string.Empty;
         private string _checkerTargetPath = string.Empty;
+        private string _incrementalTargetPath = string.Empty;
         private DateTime? _lastReserveBackup;
         private DateTime? _lastCheckerBackup;
+        private DateTime? _lastIncrementalBackup;
         private bool _includeBakFiles = false;
         private string _targetFolderSuffix = string.Empty;
+        private bool _enableAutoBackup = false;
+        private bool _enableIncrementalBackup = false;
 
         // ── Persisted properties ──────────────────────────────────────────
 
@@ -58,6 +62,13 @@ namespace ModelCopier.Models
             set => SetField(ref _checkerTargetPath, value);
         }
 
+        /// <summary>Target folder where live Incremental (Type 3) backups of modified files are written.</summary>
+        public string IncrementalTargetPath
+        {
+            get => _incrementalTargetPath;
+            set => SetField(ref _incrementalTargetPath, value);
+        }
+
         /// <summary>Whether to copy *.bak files when replicating this model.</summary>
         public bool IncludeBakFiles
         {
@@ -70,6 +81,20 @@ namespace ModelCopier.Models
         {
             get => _targetFolderSuffix;
             set => SetField(ref _targetFolderSuffix, value);
+        }
+
+        /// <summary>Whether this specific model is included in automated scheduled backups.</summary>
+        public bool EnableAutoBackup
+        {
+            get => _enableAutoBackup;
+            set => SetField(ref _enableAutoBackup, value);
+        }
+
+        /// <summary>Whether this specific model is included in live incremental sync.</summary>
+        public bool EnableIncrementalBackup
+        {
+            get => _enableIncrementalBackup;
+            set => SetField(ref _enableIncrementalBackup, value);
         }
 
         /// <summary>UTC timestamp of the most recent successful Reserve backup.</summary>
@@ -94,6 +119,17 @@ namespace ModelCopier.Models
             }
         }
 
+        /// <summary>UTC timestamp of the most recent successful Incremental backup.</summary>
+        public DateTime? LastIncrementalBackup
+        {
+            get => _lastIncrementalBackup;
+            set
+            {
+                SetField(ref _lastIncrementalBackup, value);
+                OnPropertyChanged(nameof(LastIncrementalBackupDisplay));
+            }
+        }
+
         // ── Computed / display-only properties (not serialised) ──────────
 
         [JsonIgnore]
@@ -103,6 +139,10 @@ namespace ModelCopier.Models
         [JsonIgnore]
         public string LastCheckerBackupDisplay =>
             LastCheckerBackup?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "Never";
+
+        [JsonIgnore]
+        public string LastIncrementalBackupDisplay =>
+            LastIncrementalBackup?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "Never";
 
         // ── INotifyPropertyChanged ────────────────────────────────────────
 

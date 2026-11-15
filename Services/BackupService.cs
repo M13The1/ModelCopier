@@ -48,6 +48,21 @@ namespace ModelCopier.Services
         public string DestinationPath { get; init; } = string.Empty;
     }
 
+    /// <summary>Outcome of a live incremental folder sync operation.</summary>
+    public sealed class IncrementalBackupResult
+    {
+        public int TotalScannedFiles { get; init; }
+        public int CopiedFiles { get; init; }
+        public int UnchangedFiles { get; init; }
+        public int SkippedFiles { get; init; }
+        public List<string> IgnoredFiles { get; init; } = new();
+        public List<string> RenamedFiles { get; init; } = new();
+        public List<string> UpdatedFiles { get; init; } = new();
+        public TimeSpan Duration { get; init; }
+        public string DestinationPath { get; init; } = string.Empty;
+        public bool HasModifications => CopiedFiles > 0;
+    }
+
     /// <summary>Information about a previous backup snapshot for inquiry.</summary>
     public sealed class BackupSnapshotInfo
     {
@@ -124,6 +139,44 @@ namespace ModelCopier.Services
             var invalidChars = Path.GetInvalidFileNameChars();
             var filtered = new string(suffix.Where(c => !invalidChars.Contains(c)).ToArray()).Trim();
             return filtered;
+        }
+
+        /// <summary>
+        /// Computes the persistent destination folder for live incremental backups.
+        /// Does NOT include timestamp subfolders (yyyyMM\dd\HHmm), maintaining a continuous mirror.
+        /// Destination path: &lt;TargetRoot&gt;\&lt;ModelName&gt; or &lt;TargetRoot&gt;\&lt;ModelName&gt;_&lt;Suffix&gt;
+        /// </summary>
+        public static string BuildIncrementalDestination(
+            string targetRoot,
+            string modelName,
+            string? suffix)
+        {
+            if (string.IsNullOrWhiteSpace(targetRoot))
+                return string.Empty;
+
+            string cleanSuffix = CleanSuffix(suffix);
+            string innerModelFolder;
+
+            if (string.IsNullOrWhiteSpace(cleanSuffix))
+            {
+                innerModelFolder = modelName;
+            }
+            else
+            {
+                string sep = (cleanSuffix.StartsWith("_") || cleanSuffix.StartsWith("-")) ? "" : "_";
+                innerModelFolder = $"{modelName}{sep}{cleanSuffix}";
+            }
+
+            string cleanRoot = targetRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string lastFolder = Path.GetFileName(cleanRoot);
+
+            if (string.Equals(lastFolder, innerModelFolder, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(lastFolder, modelName, StringComparison.OrdinalIgnoreCase))
+            {
+                return cleanRoot;
+            }
+
+            return Path.Combine(cleanRoot, innerModelFolder);
         }
 
         /// <summary>
@@ -214,6 +267,141 @@ namespace ModelCopier.Services
                 RenamedFiles    = renamedFiles,
                 Duration        = sw.Elapsed,
                 DestinationPath = targetDir
+            };
+        }
+
+        /// <summary>
+        /// Incrementally copies only new or modified files from <paramref name="sourceDir"/> into <paramref name="targetDir"/>.
+        /// Compares file size and write timestamps (with 1.0s tolerance).
+        /// Preserves LastWriteTimeUtc on destination files for accurate future diffs.
+        /// Also renames *.db1, *.db2 database files in model root if target folder is suffixed.
+        /// </summary>
+        public async Task<IncrementalBackupResult> CopyFolderIncrementalAsync(
+            string sourceDir,
+            string targetDir,
+            BackupOptions options,
+            IProgress<BackupProgress>? progress,
+            CancellationToken cancellationToken)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            if (!Directory.Exists(sourceDir))
+                throw new DirectoryNotFoundException($"Source folder not found:\n{sourceDir}");
+
+            string sourceModelName = Path.GetFileName(sourceDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            string targetModelName = Path.GetFileName(targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+            var allFiles = CollectFiles(sourceDir);
+            var validSourceFiles = new List<string>();
+            var ignoredFiles = new List<string>();
+
+            foreach (var file in allFiles)
+            {
+                if (ShouldIgnoreFile(file, options, out string reason))
+                {
+                    string rel = Path.GetRelativePath(sourceDir, file);
+                    ignoredFiles.Add($"{rel} [{reason}]");
+                }
+                else
+                {
+                    validSourceFiles.Add(file);
+                }
+            }
+
+            var filesToCopy = new List<(string Source, string Dest, string DestRelative)>();
+            var updatedFiles = new List<string>();
+            var renamedFiles = new List<string>();
+            int unchanged = 0;
+
+            foreach (string srcFile in validSourceFiles)
+            {
+                string relative = Path.GetRelativePath(sourceDir, srcFile);
+                string destRelative = MapDestinationRelativePath(relative, sourceModelName, targetModelName);
+                string destFile = Path.Combine(targetDir, destRelative);
+
+                if (!string.Equals(relative, destRelative, StringComparison.OrdinalIgnoreCase))
+                {
+                    renamedFiles.Add($"{relative} -> {destRelative}");
+                }
+
+                bool needsCopy = false;
+                if (!File.Exists(destFile))
+                {
+                    needsCopy = true;
+                }
+                else
+                {
+                    var srcInfo = new FileInfo(srcFile);
+                    var dstInfo = new FileInfo(destFile);
+
+                    // Compare file size or modification time (with 1.0s tolerance for filesystem rounding)
+                    if (srcInfo.Length != dstInfo.Length ||
+                        Math.Abs((srcInfo.LastWriteTimeUtc - dstInfo.LastWriteTimeUtc).TotalSeconds) > 1.0)
+                    {
+                        needsCopy = true;
+                    }
+                }
+
+                if (needsCopy)
+                {
+                    filesToCopy.Add((srcFile, destFile, destRelative));
+                    updatedFiles.Add(destRelative);
+                }
+                else
+                {
+                    unchanged++;
+                }
+            }
+
+            int totalToCopy = filesToCopy.Count;
+            int copied = 0;
+
+            Directory.CreateDirectory(targetDir);
+
+            foreach (var item in filesToCopy)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string? destDir = Path.GetDirectoryName(item.Dest);
+                if (!string.IsNullOrEmpty(destDir))
+                    Directory.CreateDirectory(destDir);
+
+                var srcInfo = new FileInfo(item.Source);
+                string src = item.Source;
+                string dst = item.Dest;
+
+                await Task.Run(() =>
+                {
+                    File.Copy(src, dst, overwrite: true);
+                    File.SetLastWriteTimeUtc(dst, srcInfo.LastWriteTimeUtc);
+                }, cancellationToken);
+
+                copied++;
+                progress?.Report(new BackupProgress
+                {
+                    TotalFiles   = totalToCopy,
+                    CopiedFiles  = copied,
+                    SkippedFiles = ignoredFiles.Count,
+                    CurrentFile  = item.DestRelative
+                });
+            }
+
+            // Ensure empty model directories (e.g. drawings, attributes) are mirrored
+            MirrorEmptyDirectories(sourceDir, targetDir);
+
+            sw.Stop();
+
+            return new IncrementalBackupResult
+            {
+                TotalScannedFiles = validSourceFiles.Count,
+                CopiedFiles       = copied,
+                UnchangedFiles    = unchanged,
+                SkippedFiles      = ignoredFiles.Count,
+                IgnoredFiles      = ignoredFiles,
+                RenamedFiles      = renamedFiles,
+                UpdatedFiles      = updatedFiles,
+                Duration          = sw.Elapsed,
+                DestinationPath   = targetDir
             };
         }
 
@@ -577,6 +765,47 @@ namespace ModelCopier.Services
                         writer.WriteLine($"  - {f}");
                     }
                 }
+                writer.WriteLine();
+            }
+            catch { }
+        }
+
+        /// <summary>Appends a structured record of an incremental sync to Records.txt.</summary>
+        public static void AppendIncrementalRecord(
+            string recordFilePath,
+            string userName,
+            string modelName,
+            string destinationPath,
+            IncrementalBackupResult result)
+        {
+            try
+            {
+                using var writer = File.AppendText(recordFilePath);
+                writer.WriteLine("----------------------------------------------------------------------");
+                writer.WriteLine($"[INCREMENTAL SYNC] Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                writer.WriteLine($"UserName     : {userName}");
+                writer.WriteLine($"Model        : {modelName}");
+                writer.WriteLine($"Destination  : {destinationPath}");
+                writer.WriteLine($"Time taken   : {result.Duration.Minutes} min {result.Duration.Seconds}.{result.Duration.Milliseconds / 100:0} sec");
+                writer.WriteLine($"Total Scanned: {result.TotalScannedFiles}");
+                writer.WriteLine($"Files Updated: {result.CopiedFiles} (new or modified)");
+                writer.WriteLine($"Unchanged    : {result.UnchangedFiles}");
+                writer.WriteLine($"Files Skipped: {result.SkippedFiles} (*.bak, *.locked, *.tmp, etc.)");
+
+                if (result.UpdatedFiles.Count > 0 && result.UpdatedFiles.Count <= 20)
+                {
+                    writer.WriteLine("Updated files:");
+                    foreach (var u in result.UpdatedFiles)
+                        writer.WriteLine($"  * {u}");
+                }
+                else if (result.UpdatedFiles.Count > 20)
+                {
+                    writer.WriteLine($"Updated files ({result.UpdatedFiles.Count} total - showing first 15):");
+                    foreach (var u in result.UpdatedFiles.Take(15))
+                        writer.WriteLine($"  * {u}");
+                    writer.WriteLine($"  ... and {result.UpdatedFiles.Count - 15} more files.");
+                }
+
                 writer.WriteLine();
             }
             catch { }

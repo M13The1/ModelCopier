@@ -16,6 +16,9 @@ namespace ModelCopier.Models
         /// <summary>Interval in minutes for automated backups (e.g. 30, 60, 120).</summary>
         public int AutoBackupIntervalMinutes { get; set; } = 60;
 
+        /// <summary>Interval in minutes for incremental backups of modified files (e.g. 5, 10, 15, 30, 60).</summary>
+        public int IncrementalIntervalMinutes { get; set; } = 15;
+
         /// <summary>Whether to play a sound chime on backup completion.</summary>
         public bool PlaySoundOnCompletion { get; set; } = true;
     }

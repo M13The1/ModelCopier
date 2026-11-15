@@ -52,10 +52,19 @@ namespace ModelCopier.ViewModels
         private string _sourceModelSizeText = "—";
         private string _reserveTargetFreeSpaceText = "—";
         private string _checkerTargetFreeSpaceText = "—";
+        private string _incrementalTargetFreeSpaceText = "—";
+        private string _incrementalDestinationPreview = string.Empty;
 
         // Auto-Backup Timer
         private readonly DispatcherTimer _autoBackupTimer;
         private TimeSpan _timeUntilNextAutoBackup;
+
+        // Incremental Live Sync (Session-only)
+        private bool _isIncrementalSyncRunning;
+        private bool _isIncrementalBusy;
+        private string _incrementalStatusText = "Stopped (Session only)";
+        private readonly DispatcherTimer _incrementalTimer;
+        private TimeSpan _timeUntilNextIncrementalSync;
 
         // In-App Toast & Chime
         private string _toastTitle = string.Empty;
@@ -72,6 +81,9 @@ namespace ModelCopier.ViewModels
             _backupService = new BackupService();
             _config        = _configService.Load();
             Models         = new ObservableCollection<ModelEntry>(_config.Models);
+
+            foreach (var m in Models)
+                HookModelPropertyChanged(m);
 
             ModelsView = CollectionViewSource.GetDefaultView(Models);
             ModelsView.Filter = FilterModel;
@@ -124,6 +136,23 @@ namespace ModelCopier.ViewModels
             ReloadConfigCommand       = new RelayCommand(_ => ExecuteReloadConfig());
             DismissToastCommand       = new RelayCommand(_ => IsToastVisible = false);
 
+            StartIncrementalSyncCommand  = new RelayCommand(_ => ExecuteStartIncrementalSync());
+            StopIncrementalSyncCommand   = new RelayCommand(_ => ExecuteStopIncrementalSync());
+            ToggleIncrementalSyncCommand = new RelayCommand(_ =>
+            {
+                if (IsIncrementalSyncRunning) ExecuteStopIncrementalSync();
+                else ExecuteStartIncrementalSync();
+            });
+            SyncIncrementalNowCommand    = new RelayCommand(_ => _ = ExecuteIncrementalBackupForSelectedModelsAsync(isAutomated: false),
+                                               _ => !IsIncrementalBusy && !IsBusy);
+            OpenIncrementalFolderCommand = new RelayCommand(_ =>
+            {
+                if (!string.IsNullOrWhiteSpace(IncrementalDestinationPreview) && Directory.Exists(IncrementalDestinationPreview))
+                    OpenFileOrFolder(IncrementalDestinationPreview);
+                else if (SelectedModel != null && Directory.Exists(SelectedModel.IncrementalTargetPath))
+                    OpenFileOrFolder(SelectedModel.IncrementalTargetPath);
+            }, _ => SelectedModel != null && !string.IsNullOrWhiteSpace(SelectedModel.IncrementalTargetPath));
+
             // Toast Timer (5 seconds)
             _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _toastTimer.Tick += (_, _) =>
@@ -138,6 +167,11 @@ namespace ModelCopier.ViewModels
             ResetAutoBackupTimer();
             if (_config.AutoBackupEnabled)
                 _autoBackupTimer.Start();
+
+            // Incremental interval timer (session-only, tick every second for live countdown)
+            _incrementalTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _incrementalTimer.Tick += OnIncrementalTimerTick;
+            ResetIncrementalTimer();
 
             UpdateDestinationPreview();
         }
@@ -173,7 +207,8 @@ namespace ModelCopier.ViewModels
                 return (entry.Name != null && entry.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                        (entry.SourcePath != null && entry.SourcePath.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                        (entry.ReserveTargetPath != null && entry.ReserveTargetPath.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
-                       (entry.CheckerTargetPath != null && entry.CheckerTargetPath.Contains(query, StringComparison.OrdinalIgnoreCase));
+                       (entry.CheckerTargetPath != null && entry.CheckerTargetPath.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                       (entry.IncrementalTargetPath != null && entry.IncrementalTargetPath.Contains(query, StringComparison.OrdinalIgnoreCase));
             }
             return false;
         }
@@ -226,6 +261,18 @@ namespace ModelCopier.ViewModels
             private set => SetField(ref _checkerTargetFreeSpaceText, value);
         }
 
+        public string IncrementalTargetFreeSpaceText
+        {
+            get => _incrementalTargetFreeSpaceText;
+            private set => SetField(ref _incrementalTargetFreeSpaceText, value);
+        }
+
+        public string IncrementalDestinationPreview
+        {
+            get => _incrementalDestinationPreview;
+            private set => SetField(ref _incrementalDestinationPreview, value);
+        }
+
         private async Task UpdateStorageInfoAsync()
         {
             if (SelectedModel == null)
@@ -233,6 +280,7 @@ namespace ModelCopier.ViewModels
                 SourceModelSizeText = "—";
                 ReserveTargetFreeSpaceText = "—";
                 CheckerTargetFreeSpaceText = "—";
+                IncrementalTargetFreeSpaceText = "—";
                 return;
             }
 
@@ -244,6 +292,9 @@ namespace ModelCopier.ViewModels
 
             long chkFree = BackupService.GetDriveFreeSpace(model.CheckerTargetPath);
             CheckerTargetFreeSpaceText = chkFree >= 0 ? $"{BackupService.FormatBytes(chkFree)} free" : "Unknown";
+
+            long incFree = BackupService.GetDriveFreeSpace(model.IncrementalTargetPath);
+            IncrementalTargetFreeSpaceText = incFree >= 0 ? $"{BackupService.FormatBytes(incFree)} free" : "Unknown";
 
             // Calculate source model size on background thread
             SourceModelSizeText = "Calculating…";
@@ -323,6 +374,7 @@ namespace ModelCopier.ViewModels
             if (SelectedModel == null)
             {
                 DestinationPreview = "Select a model from the registry to preview the destination path.";
+                IncrementalDestinationPreview = string.Empty;
                 return;
             }
 
@@ -335,6 +387,9 @@ namespace ModelCopier.ViewModels
                 previewRoot, SelectedModel.Name, now, TargetFolderSuffix);
 
             DestinationPreview = sample;
+
+            IncrementalDestinationPreview = BackupService.BuildIncrementalDestination(
+                SelectedModel.IncrementalTargetPath, SelectedModel.Name, TargetFolderSuffix);
         }
 
         // ── Auto-Backup Scheduling ───────────────────────────────────────
@@ -381,13 +436,18 @@ namespace ModelCopier.ViewModels
 
         public IReadOnlyList<int> AvailableIntervals { get; } = new[] { 15, 30, 60, 120 };
 
+        public int AutoBackupSelectedCount => Models.Count(m => m.EnableAutoBackup);
+        public int IncrementalSelectedCount => Models.Count(m => m.EnableIncrementalBackup);
+
         public string NextAutoBackupText
         {
             get
             {
                 if (!IsAutoBackupEnabled)
                     return "Scheduled: Inactive";
-                return $"Auto-Backup in: {_timeUntilNextAutoBackup.Minutes:D2}m {_timeUntilNextAutoBackup.Seconds:D2}s";
+                int count = AutoBackupSelectedCount;
+                string label = count == 0 ? "no models selected" : $"{count} model{(count == 1 ? "" : "s")} selected";
+                return $"Auto-Backup in: {_timeUntilNextAutoBackup.Minutes:D2}m {_timeUntilNextAutoBackup.Seconds:D2}s ({label})";
             }
         }
 
@@ -405,13 +465,375 @@ namespace ModelCopier.ViewModels
             if (_timeUntilNextAutoBackup <= TimeSpan.Zero)
             {
                 ResetAutoBackupTimer();
-                if (SelectedModel != null && !IsBusy)
+                if (!IsBusy)
                 {
-                    StatusMessage = $"Scheduled automated backup triggered for '{SelectedModel.Name}'…";
-                    ExecuteCreateBackup(isAutomated: true);
+                    _ = ExecuteAutoBackupForSelectedModelsAsync();
                 }
             }
             OnPropertyChanged(nameof(NextAutoBackupText));
+        }
+
+        private async Task ExecuteAutoBackupForSelectedModelsAsync()
+        {
+            var targets = Models.Where(m => m.EnableAutoBackup).ToList();
+            if (targets.Count == 0)
+            {
+                StatusMessage = "Auto-backup skipped: No models selected. Check 'Auto' on the models you wish to schedule.";
+                return;
+            }
+
+            if (IsBusy)
+            {
+                StatusMessage = "Backup engine busy; scheduled auto-backup deferred.";
+                return;
+            }
+
+            IsBusy = true;
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
+
+            int modelsProcessed = 0;
+            int totalCopiedAcrossModels = 0;
+            var now = DateTime.Now;
+
+            try
+            {
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    if (token.IsCancellationRequested) break;
+
+                    var model = targets[i];
+                    if (!Directory.Exists(model.SourcePath))
+                    {
+                        StatusMessage = $"Auto-backup skipped '{model.Name}': Source folder missing.";
+                        continue;
+                    }
+
+                    StatusMessage = $"Auto-backup ({i + 1}/{targets.Count}): Backing up '{model.Name}'…";
+
+                    var options = new BackupOptions
+                    {
+                        IncludeBakFiles      = model.IncludeBakFiles,
+                        ExcludeMultiUserFlag = true,
+                        ExcludeLockFiles     = true,
+                        ExcludeTmpFiles      = true
+                    };
+
+                    string? reserveDest = !string.IsNullOrWhiteSpace(model.ReserveTargetPath)
+                        ? BackupService.BuildBackupDestination(model.ReserveTargetPath, model.Name, now, model.TargetFolderSuffix)
+                        : null;
+
+                    string? checkerDest = !string.IsNullOrWhiteSpace(model.CheckerTargetPath)
+                        ? BackupService.BuildBackupDestination(model.CheckerTargetPath, model.Name, now, model.TargetFolderSuffix)
+                        : null;
+
+                    var progress = new Progress<BackupProgress>(p =>
+                    {
+                        ProgressPercentage = p.Percentage;
+                        ProgressCopied     = p.CopiedFiles;
+                        ProgressTotal      = p.TotalFiles;
+                        ProgressText       = $"[{model.Name}] Copying {p.CopiedFiles}/{p.TotalFiles}: {p.CurrentFile}";
+                    });
+
+                    if (reserveDest != null && !token.IsCancellationRequested)
+                    {
+                        var result = await _backupService.CopyFolderAsync(model.SourcePath, reserveDest, options, progress, token);
+                        model.LastReserveBackup = DateTime.UtcNow;
+                        totalCopiedAcrossModels += result.CopiedFiles;
+                        BackupService.AppendRecord(
+                            RecordsFilePath, Environment.UserName, model.Name, reserveDest, result.Duration, result.IgnoredFiles, result.RenamedFiles);
+                    }
+
+                    if (checkerDest != null && !token.IsCancellationRequested)
+                    {
+                        var result = await _backupService.CopyFolderAsync(model.SourcePath, checkerDest, options, progress, token);
+                        model.LastCheckerBackup = DateTime.UtcNow;
+                        totalCopiedAcrossModels += result.CopiedFiles;
+                        BackupService.AppendRecord(
+                            RecordsFilePath, Environment.UserName, model.Name, checkerDest, result.Duration, result.IgnoredFiles, result.RenamedFiles);
+                    }
+
+                    modelsProcessed++;
+                }
+
+                _configService.Save(_config);
+                StatusMessage = $"Scheduled auto-backup completed for {modelsProcessed} model(s) ({totalCopiedAcrossModels} files copied).";
+                ShowToast("Auto-Backup Finished", $"Successfully backed up {modelsProcessed} selected model(s).");
+                _ = UpdateStorageInfoAsync();
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Auto-backup error: {ex.Message}";
+                ShowToast("Auto-Backup Error", ex.Message, isSuccess: false);
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+        // ── Incremental Live Sync (Modified Files Only — Session Only) ───
+
+        public bool IsIncrementalSyncRunning
+        {
+            get => _isIncrementalSyncRunning;
+            private set
+            {
+                if (SetField(ref _isIncrementalSyncRunning, value))
+                {
+                    OnPropertyChanged(nameof(IsIncrementalSyncStopped));
+                    OnPropertyChanged(nameof(NextIncrementalSyncText));
+                }
+            }
+        }
+
+        public bool IsIncrementalSyncStopped => !_isIncrementalSyncRunning;
+
+        public bool IsIncrementalBusy
+        {
+            get => _isIncrementalBusy;
+            private set => SetField(ref _isIncrementalBusy, value);
+        }
+
+        public int IncrementalIntervalMinutes
+        {
+            get => _config.IncrementalIntervalMinutes <= 0 ? 15 : _config.IncrementalIntervalMinutes;
+            set
+            {
+                if (_config.IncrementalIntervalMinutes != value)
+                {
+                    _config.IncrementalIntervalMinutes = value;
+                    _configService.Save(_config);
+                    OnPropertyChanged();
+                    ResetIncrementalTimer();
+                }
+            }
+        }
+
+        public IReadOnlyList<int> AvailableIncrementalIntervals { get; } = new[] { 5, 10, 15, 30, 60 };
+
+        public string NextIncrementalSyncText
+        {
+            get
+            {
+                int count = IncrementalSelectedCount;
+                string label = count == 0 ? "no models selected" : $"{count} model{(count == 1 ? "" : "s")} selected";
+                if (!IsIncrementalSyncRunning)
+                    return $"Incremental Sync: Stopped ({label})";
+                return $"Next sync in: {_timeUntilNextIncrementalSync.Minutes:D2}m {_timeUntilNextIncrementalSync.Seconds:D2}s ({label})";
+            }
+        }
+
+        public string IncrementalStatusText
+        {
+            get => _incrementalStatusText;
+            private set => SetField(ref _incrementalStatusText, value);
+        }
+
+        private void ResetIncrementalTimer()
+        {
+            _timeUntilNextIncrementalSync = TimeSpan.FromMinutes(IncrementalIntervalMinutes);
+            OnPropertyChanged(nameof(NextIncrementalSyncText));
+        }
+
+        private void OnIncrementalTimerTick(object? sender, EventArgs e)
+        {
+            if (!IsIncrementalSyncRunning) return;
+
+            _timeUntilNextIncrementalSync = _timeUntilNextIncrementalSync.Subtract(TimeSpan.FromSeconds(1));
+            if (_timeUntilNextIncrementalSync <= TimeSpan.Zero)
+            {
+                ResetIncrementalTimer();
+                if (!IsBusy && !IsIncrementalBusy)
+                {
+                    _ = ExecuteIncrementalBackupForSelectedModelsAsync(isAutomated: true);
+                }
+            }
+            OnPropertyChanged(nameof(NextIncrementalSyncText));
+        }
+
+        private void ExecuteStartIncrementalSync()
+        {
+            var selectedModels = Models.Where(m => m.EnableIncrementalBackup).ToList();
+            if (selectedModels.Count == 0)
+            {
+                if (SelectedModel != null)
+                {
+                    if (string.IsNullOrWhiteSpace(SelectedModel.IncrementalTargetPath))
+                    {
+                        var ask = MessageBox.Show(
+                            $"Model '{SelectedModel.Name}' does not have an Incremental Target Directory configured.\n\n" +
+                            "Would you like to edit this model now to select an Incremental Target folder?",
+                            "Incremental Target Required",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
+
+                        if (ask == MessageBoxResult.Yes)
+                        {
+                            ExecuteEdit();
+                        }
+                        return;
+                    }
+
+                    SelectedModel.EnableIncrementalBackup = true;
+                    _configService.Save(_config);
+                    selectedModels.Add(SelectedModel);
+                }
+                else
+                {
+                    MessageBox.Show("Please check the 'Incremental' box on the model(s) you want to include in live sync.",
+                        "No Models Selected", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+            }
+
+            IsIncrementalSyncRunning = true;
+            ResetIncrementalTimer();
+            _incrementalTimer.Start();
+            IncrementalStatusText = $"Active • Syncing {selectedModels.Count} model(s) every {IncrementalIntervalMinutes}m";
+            ShowToast("Incremental Sync Active", $"Live sync enabled for {selectedModels.Count} selected model(s). Modified files will be copied every {IncrementalIntervalMinutes}m.");
+            _ = ExecuteIncrementalBackupForSelectedModelsAsync(isAutomated: true);
+        }
+
+        private void ExecuteStopIncrementalSync()
+        {
+            IsIncrementalSyncRunning = false;
+            _incrementalTimer.Stop();
+            IncrementalStatusText = "Stopped (Session only)";
+            OnPropertyChanged(nameof(NextIncrementalSyncText));
+            ShowToast("Incremental Sync Stopped", "Live incremental sync has been paused.");
+        }
+
+        public async Task ExecuteIncrementalBackupForSelectedModelsAsync(bool isAutomated)
+        {
+            var targets = Models.Where(m => m.EnableIncrementalBackup).ToList();
+            if (targets.Count == 0)
+            {
+                if (!isAutomated && SelectedModel != null)
+                {
+                    targets.Add(SelectedModel);
+                }
+                else
+                {
+                    IncrementalStatusText = "No models selected for incremental sync";
+                    StatusMessage = "Incremental sync: No models selected. Check 'Incremental' on models to include.";
+                    return;
+                }
+            }
+
+            if (IsBusy || IsIncrementalBusy)
+            {
+                StatusMessage = "Engine currently busy; incremental sync deferred.";
+                return;
+            }
+
+            try
+            {
+                IsIncrementalBusy = true;
+                IncrementalStatusText = $"Comparing & syncing {targets.Count} model(s)…";
+                StatusMessage = $"Running incremental sync for {targets.Count} selected model(s)…";
+
+                int totalCopiedAcrossModels = 0;
+                int totalScannedAcrossModels = 0;
+                int modelsUpdatedCount = 0;
+
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    var model = targets[i];
+                    if (string.IsNullOrWhiteSpace(model.IncrementalTargetPath))
+                    {
+                        if (!isAutomated && targets.Count == 1)
+                        {
+                            MessageBox.Show(
+                                $"Model '{model.Name}' does not have an Incremental Target Directory configured.\n\n" +
+                                "Click 'Edit' to set an Incremental Target folder.",
+                                "Incremental Path Required",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Warning);
+                        }
+                        continue;
+                    }
+
+                    if (!Directory.Exists(model.SourcePath))
+                    {
+                        continue;
+                    }
+
+                    string destination = BackupService.BuildIncrementalDestination(
+                        model.IncrementalTargetPath, model.Name, model.TargetFolderSuffix);
+
+                    var options = new BackupOptions { IncludeBakFiles = model.IncludeBakFiles };
+
+                    var progress = new Progress<BackupProgress>(p =>
+                    {
+                        IncrementalStatusText = $"[{model.Name}] Syncing {p.CopiedFiles}/{p.TotalFiles} modified files…";
+                    });
+
+                    using var cts = new CancellationTokenSource();
+                    var result = await _backupService.CopyFolderIncrementalAsync(
+                        model.SourcePath, destination, options, progress, cts.Token);
+
+                    model.LastIncrementalBackup = DateTime.UtcNow;
+                    totalCopiedAcrossModels += result.CopiedFiles;
+                    totalScannedAcrossModels += result.TotalScannedFiles;
+                    if (result.CopiedFiles > 0) modelsUpdatedCount++;
+
+                    BackupService.AppendIncrementalRecord(
+                        RecordsFilePath, Environment.UserName, model.Name, destination, result);
+                }
+
+                _configService.Save(_config);
+                _ = UpdateStorageInfoAsync();
+
+                if (totalCopiedAcrossModels > 0)
+                {
+                    IncrementalStatusText = $"Last sync: {totalCopiedAcrossModels} file(s) updated ({modelsUpdatedCount}/{targets.Count} models modified)";
+                    StatusMessage = $"Incremental sync: {totalCopiedAcrossModels} file(s) updated across {targets.Count} selected model(s).";
+                    ShowToast("Incremental Sync Complete", $"{totalCopiedAcrossModels} file(s) updated across {targets.Count} selected model(s).");
+                }
+                else
+                {
+                    IncrementalStatusText = $"Last sync: All {targets.Count} model(s) up-to-date";
+                    StatusMessage = $"Incremental sync: All {targets.Count} selected model(s) are up-to-date.";
+                    if (!isAutomated)
+                    {
+                        ShowToast("Incremental Sync", "All selected models are up-to-date. No files were modified.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                IncrementalStatusText = "Error during incremental sync";
+                StatusMessage = $"Incremental sync error: {ex.Message}";
+                ShowToast("Incremental Sync Error", ex.Message, isSuccess: false);
+            }
+            finally
+            {
+                IsIncrementalBusy = false;
+                if (IsIncrementalSyncRunning)
+                {
+                    ResetIncrementalTimer();
+                }
+            }
+        }
+
+        private void HookModelPropertyChanged(ModelEntry model)
+        {
+            model.PropertyChanged -= OnModelPropertyChanged;
+            model.PropertyChanged += OnModelPropertyChanged;
+        }
+
+        private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ModelEntry.EnableAutoBackup) ||
+                e.PropertyName == nameof(ModelEntry.EnableIncrementalBackup))
+            {
+                _configService.Save(_config);
+                OnPropertyChanged(nameof(AutoBackupSelectedCount));
+                OnPropertyChanged(nameof(IncrementalSelectedCount));
+                OnPropertyChanged(nameof(NextAutoBackupText));
+                OnPropertyChanged(nameof(NextIncrementalSyncText));
+            }
         }
 
         // ── Shared Network Configuration ─────────────────────────────────
@@ -452,7 +874,10 @@ namespace ModelCopier.ViewModels
             _config = _configService.Load();
             Models.Clear();
             foreach (var m in _config.Models)
+            {
                 Models.Add(m);
+                HookModelPropertyChanged(m);
+            }
 
             OnPropertyChanged(nameof(ConfigFilePath));
             OnPropertyChanged(nameof(IsUsingSharedConfig));
@@ -600,6 +1025,11 @@ namespace ModelCopier.ViewModels
         public ICommand ResetLocalConfigCommand           { get; }
         public ICommand ReloadConfigCommand               { get; }
         public ICommand DismissToastCommand               { get; }
+        public ICommand StartIncrementalSyncCommand       { get; }
+        public ICommand StopIncrementalSyncCommand        { get; }
+        public ICommand ToggleIncrementalSyncCommand      { get; }
+        public ICommand SyncIncrementalNowCommand         { get; }
+        public ICommand OpenIncrementalFolderCommand      { get; }
 
         private static void OpenFileOrFolder(string path)
         {
@@ -683,6 +1113,7 @@ namespace ModelCopier.ViewModels
             if (dialog.ShowDialog() == true)
             {
                 var entry = vm.ToModelEntry();
+                HookModelPropertyChanged(entry);
                 Models.Add(entry);
                 _config.Models.Add(entry);
                 _configService.Save(_config);
@@ -703,10 +1134,13 @@ namespace ModelCopier.ViewModels
             {
                 SelectedModel.Name               = vm.Name.Trim();
                 SelectedModel.SourcePath         = vm.SourcePath.Trim();
-                SelectedModel.ReserveTargetPath  = vm.ReserveTargetPath.Trim();
-                SelectedModel.CheckerTargetPath  = vm.CheckerTargetPath.Trim();
-                SelectedModel.IncludeBakFiles    = vm.IncludeBakFiles;
+                SelectedModel.ReserveTargetPath     = vm.ReserveTargetPath.Trim();
+                SelectedModel.CheckerTargetPath     = vm.CheckerTargetPath.Trim();
+                SelectedModel.IncrementalTargetPath = vm.IncrementalTargetPath.Trim();
+                SelectedModel.IncludeBakFiles       = vm.IncludeBakFiles;
                 SelectedModel.TargetFolderSuffix = vm.TargetFolderSuffix.Trim();
+                SelectedModel.EnableAutoBackup      = vm.EnableAutoBackup;
+                SelectedModel.EnableIncrementalBackup = vm.EnableIncrementalBackup;
 
                 IncludeBakFiles    = vm.IncludeBakFiles;
                 TargetFolderSuffix = vm.TargetFolderSuffix.Trim();

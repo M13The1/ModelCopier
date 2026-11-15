@@ -1,10 +1,18 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Threading;
+using Microsoft.Win32;
 using ModelCopier.Models;
 using ModelCopier.Services;
 using ModelCopier.Views;
@@ -13,13 +21,14 @@ namespace ModelCopier.ViewModels
 {
     /// <summary>
     /// ViewModel for the main window.
-    /// Owns the model list, CRUD commands, and the async backup workflow.
+    /// Owns the model list, search filtering, scheduled automated backups,
+    /// free space validation, Tekla launcher, shared network config, and backup workflow.
     /// </summary>
     public class MainViewModel : ViewModelBase
     {
         private readonly ConfigService _configService;
         private readonly BackupService _backupService;
-        private readonly AppConfig     _config;
+        private AppConfig              _config;
 
         // Backup state
         private ModelEntry? _selectedModel;
@@ -36,6 +45,25 @@ namespace ModelCopier.ViewModels
         private string       _statusMessage  = "Ready";
         private CancellationTokenSource? _cts;
 
+        // Search & Filter
+        private string _searchText = string.Empty;
+
+        // Storage metrics
+        private string _sourceModelSizeText = "—";
+        private string _reserveTargetFreeSpaceText = "—";
+        private string _checkerTargetFreeSpaceText = "—";
+
+        // Auto-Backup Timer
+        private readonly DispatcherTimer _autoBackupTimer;
+        private TimeSpan _timeUntilNextAutoBackup;
+
+        // In-App Toast & Chime
+        private string _toastTitle = string.Empty;
+        private string _toastMessage = string.Empty;
+        private bool   _isToastVisible;
+        private bool   _toastIsSuccess = true;
+        private readonly DispatcherTimer _toastTimer;
+
         // ── Constructor ──────────────────────────────────────────────────
 
         public MainViewModel()
@@ -45,12 +73,16 @@ namespace ModelCopier.ViewModels
             _config        = _configService.Load();
             Models         = new ObservableCollection<ModelEntry>(_config.Models);
 
+            ModelsView = CollectionViewSource.GetDefaultView(Models);
+            ModelsView.Filter = FilterModel;
+
+            // Commands
             AddCommand          = new RelayCommand(_ => ExecuteAdd());
             EditCommand         = new RelayCommand(_ => ExecuteEdit(),
                                       _ => SelectedModel != null && IsNotBusy);
             DeleteCommand       = new RelayCommand(_ => ExecuteDelete(),
                                       _ => SelectedModel != null && IsNotBusy);
-            CreateBackupCommand = new RelayCommand(_ => ExecuteCreateBackup(),
+            CreateBackupCommand = new RelayCommand(_ => ExecuteCreateBackup(isAutomated: false),
                                       _ => SelectedModel != null
                                            && (CreateReserveBackup || CreateCheckerBackup)
                                            && IsNotBusy);
@@ -84,12 +116,67 @@ namespace ModelCopier.ViewModels
                     OpenFileOrFolder(SelectedModel.SourcePath);
             }, _ => SelectedModel != null && !string.IsNullOrWhiteSpace(SelectedModel.SourcePath));
 
+            ClearSearchCommand = new RelayCommand(_ => SearchText = string.Empty);
+            LaunchSelectedModelInTeklaCommand = new RelayCommand(_ => ExecuteLaunchInTekla(), _ => SelectedModel != null);
+
+            SelectSharedConfigCommand = new RelayCommand(_ => ExecuteSelectSharedConfig());
+            ResetLocalConfigCommand   = new RelayCommand(_ => ExecuteResetLocalConfig());
+            ReloadConfigCommand       = new RelayCommand(_ => ExecuteReloadConfig());
+            DismissToastCommand       = new RelayCommand(_ => IsToastVisible = false);
+
+            // Toast Timer (5 seconds)
+            _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            _toastTimer.Tick += (_, _) =>
+            {
+                IsToastVisible = false;
+                _toastTimer.Stop();
+            };
+
+            // Auto-backup interval timer (ticks every second for live countdown)
+            _autoBackupTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _autoBackupTimer.Tick += OnAutoBackupTimerTick;
+            ResetAutoBackupTimer();
+            if (_config.AutoBackupEnabled)
+                _autoBackupTimer.Start();
+
             UpdateDestinationPreview();
         }
 
-        // ── Observable list ──────────────────────────────────────────────
+        // ── Observable list & Filtered View ──────────────────────────────
 
         public ObservableCollection<ModelEntry> Models { get; }
+        public ICollectionView ModelsView { get; }
+
+        public string SearchText
+        {
+            get => _searchText;
+            set
+            {
+                if (SetField(ref _searchText, value))
+                {
+                    ModelsView.Refresh();
+                    OnPropertyChanged(nameof(HasSearchText));
+                }
+            }
+        }
+
+        public bool HasSearchText => !string.IsNullOrEmpty(_searchText);
+
+        private bool FilterModel(object obj)
+        {
+            if (string.IsNullOrWhiteSpace(_searchText))
+                return true;
+
+            if (obj is ModelEntry entry)
+            {
+                string query = _searchText.Trim();
+                return (entry.Name != null && entry.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                       (entry.SourcePath != null && entry.SourcePath.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                       (entry.ReserveTargetPath != null && entry.ReserveTargetPath.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                       (entry.CheckerTargetPath != null && entry.CheckerTargetPath.Contains(query, StringComparison.OrdinalIgnoreCase));
+            }
+            return false;
+        }
 
         // ── Selection ────────────────────────────────────────────────────
 
@@ -112,11 +199,62 @@ namespace ModelCopier.ViewModels
                     }
 
                     UpdateDestinationPreview();
+                    _ = UpdateStorageInfoAsync();
                 }
             }
         }
 
         public bool HasSelectedModel => _selectedModel != null;
+
+        // ── Storage metrics & Pre-check ──────────────────────────────────
+
+        public string SourceModelSizeText
+        {
+            get => _sourceModelSizeText;
+            private set => SetField(ref _sourceModelSizeText, value);
+        }
+
+        public string ReserveTargetFreeSpaceText
+        {
+            get => _reserveTargetFreeSpaceText;
+            private set => SetField(ref _reserveTargetFreeSpaceText, value);
+        }
+
+        public string CheckerTargetFreeSpaceText
+        {
+            get => _checkerTargetFreeSpaceText;
+            private set => SetField(ref _checkerTargetFreeSpaceText, value);
+        }
+
+        private async Task UpdateStorageInfoAsync()
+        {
+            if (SelectedModel == null)
+            {
+                SourceModelSizeText = "—";
+                ReserveTargetFreeSpaceText = "—";
+                CheckerTargetFreeSpaceText = "—";
+                return;
+            }
+
+            var model = SelectedModel;
+
+            // Query drive free space immediately
+            long resFree = BackupService.GetDriveFreeSpace(model.ReserveTargetPath);
+            ReserveTargetFreeSpaceText = resFree >= 0 ? $"{BackupService.FormatBytes(resFree)} free" : "Unknown";
+
+            long chkFree = BackupService.GetDriveFreeSpace(model.CheckerTargetPath);
+            CheckerTargetFreeSpaceText = chkFree >= 0 ? $"{BackupService.FormatBytes(chkFree)} free" : "Unknown";
+
+            // Calculate source model size on background thread
+            SourceModelSizeText = "Calculating…";
+            var options = new BackupOptions { IncludeBakFiles = IncludeBakFiles };
+            long size = await Task.Run(() => BackupService.GetDirectorySize(model.SourcePath, options));
+
+            if (SelectedModel == model)
+            {
+                SourceModelSizeText = BackupService.FormatBytes(size);
+            }
+        }
 
         // ── Backup options ───────────────────────────────────────────────
 
@@ -140,7 +278,6 @@ namespace ModelCopier.ViewModels
             }
         }
 
-        /// <summary>Whether to copy *.bak files when replicating models.</summary>
         public bool IncludeBakFiles
         {
             get => _includeBakFiles;
@@ -153,11 +290,11 @@ namespace ModelCopier.ViewModels
                         SelectedModel.IncludeBakFiles = value;
                         _configService.Save(_config);
                     }
+                    _ = UpdateStorageInfoAsync();
                 }
             }
         }
 
-        /// <summary>Custom suffix appended to the inner model folder after HHmm (e.g. QC, RevA).</summary>
         public string TargetFolderSuffix
         {
             get => _targetFolderSuffix;
@@ -198,6 +335,192 @@ namespace ModelCopier.ViewModels
                 previewRoot, SelectedModel.Name, now, TargetFolderSuffix);
 
             DestinationPreview = sample;
+        }
+
+        // ── Auto-Backup Scheduling ───────────────────────────────────────
+
+        public bool IsAutoBackupEnabled
+        {
+            get => _config.AutoBackupEnabled;
+            set
+            {
+                if (_config.AutoBackupEnabled != value)
+                {
+                    _config.AutoBackupEnabled = value;
+                    _configService.Save(_config);
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(NextAutoBackupText));
+
+                    if (value)
+                    {
+                        ResetAutoBackupTimer();
+                        _autoBackupTimer.Start();
+                    }
+                    else
+                    {
+                        _autoBackupTimer.Stop();
+                    }
+                }
+            }
+        }
+
+        public int AutoBackupIntervalMinutes
+        {
+            get => _config.AutoBackupIntervalMinutes <= 0 ? 60 : _config.AutoBackupIntervalMinutes;
+            set
+            {
+                if (_config.AutoBackupIntervalMinutes != value)
+                {
+                    _config.AutoBackupIntervalMinutes = value;
+                    _configService.Save(_config);
+                    OnPropertyChanged();
+                    ResetAutoBackupTimer();
+                }
+            }
+        }
+
+        public IReadOnlyList<int> AvailableIntervals { get; } = new[] { 15, 30, 60, 120 };
+
+        public string NextAutoBackupText
+        {
+            get
+            {
+                if (!IsAutoBackupEnabled)
+                    return "Scheduled: Inactive";
+                return $"Auto-Backup in: {_timeUntilNextAutoBackup.Minutes:D2}m {_timeUntilNextAutoBackup.Seconds:D2}s";
+            }
+        }
+
+        private void ResetAutoBackupTimer()
+        {
+            _timeUntilNextAutoBackup = TimeSpan.FromMinutes(AutoBackupIntervalMinutes);
+            OnPropertyChanged(nameof(NextAutoBackupText));
+        }
+
+        private void OnAutoBackupTimerTick(object? sender, EventArgs e)
+        {
+            if (!IsAutoBackupEnabled) return;
+
+            _timeUntilNextAutoBackup = _timeUntilNextAutoBackup.Subtract(TimeSpan.FromSeconds(1));
+            if (_timeUntilNextAutoBackup <= TimeSpan.Zero)
+            {
+                ResetAutoBackupTimer();
+                if (SelectedModel != null && !IsBusy)
+                {
+                    StatusMessage = $"Scheduled automated backup triggered for '{SelectedModel.Name}'…";
+                    ExecuteCreateBackup(isAutomated: true);
+                }
+            }
+            OnPropertyChanged(nameof(NextAutoBackupText));
+        }
+
+        // ── Shared Network Configuration ─────────────────────────────────
+
+        public bool IsUsingSharedConfig => _configService.IsUsingSharedConfig;
+
+        public string ConfigFilePath => _configService.ConfigPath;
+
+        public string ConfigLocationBadge =>
+            IsUsingSharedConfig ? "NETWORK SHARED CONFIG" : "LOCAL CONFIG";
+
+        private void ExecuteSelectSharedConfig()
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "Select Shared models.json on Office Network Drive",
+                Filter = "Model Registry (*.json)|*.json|All Files (*.*)|*.*",
+                CheckFileExists = false
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                _configService.SetCustomConfigPath(dialog.FileName);
+                ExecuteReloadConfig();
+                ShowToast("Shared Config Activated", $"Connected to network registry:\n{dialog.FileName}");
+            }
+        }
+
+        private void ExecuteResetLocalConfig()
+        {
+            _configService.ResetToDefault();
+            ExecuteReloadConfig();
+            ShowToast("Local Config Restored", "Reverted to local application models.json.");
+        }
+
+        private void ExecuteReloadConfig()
+        {
+            _config = _configService.Load();
+            Models.Clear();
+            foreach (var m in _config.Models)
+                Models.Add(m);
+
+            OnPropertyChanged(nameof(ConfigFilePath));
+            OnPropertyChanged(nameof(IsUsingSharedConfig));
+            OnPropertyChanged(nameof(ConfigLocationBadge));
+
+            SelectedModel = Models.FirstOrDefault();
+            StatusMessage = "Configuration reloaded from disk/network.";
+        }
+
+        // ── Toast Notification & Sound Chime ─────────────────────────────
+
+        public bool PlaySoundOnCompletion
+        {
+            get => _config.PlaySoundOnCompletion;
+            set
+            {
+                if (_config.PlaySoundOnCompletion != value)
+                {
+                    _config.PlaySoundOnCompletion = value;
+                    _configService.Save(_config);
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string ToastTitle
+        {
+            get => _toastTitle;
+            private set => SetField(ref _toastTitle, value);
+        }
+
+        public string ToastMessage
+        {
+            get => _toastMessage;
+            private set => SetField(ref _toastMessage, value);
+        }
+
+        public bool IsToastVisible
+        {
+            get => _isToastVisible;
+            private set => SetField(ref _isToastVisible, value);
+        }
+
+        public bool ToastIsSuccess
+        {
+            get => _toastIsSuccess;
+            private set => SetField(ref _toastIsSuccess, value);
+        }
+
+        public void ShowToast(string title, string message, bool isSuccess = true)
+        {
+            ToastTitle = title;
+            ToastMessage = message;
+            ToastIsSuccess = isSuccess;
+            IsToastVisible = true;
+
+            if (PlaySoundOnCompletion)
+            {
+                try { System.Media.SystemSounds.Asterisk.Play(); } catch { }
+            }
+
+            if (Application.Current?.MainWindow != null)
+            {
+                FlashWindow(Application.Current.MainWindow);
+            }
+
+            _toastTimer.Stop();
+            _toastTimer.Start();
         }
 
         // ── Progress / busy state ────────────────────────────────────────
@@ -244,26 +567,39 @@ namespace ModelCopier.ViewModels
             private set => SetField(ref _statusMessage, value);
         }
 
-        /// <summary>Path of the JSON config file — shown in the footer bar.</summary>
-        public string ConfigFilePath => _configService.ConfigPath;
+        public string AppVersion
+        {
+            get
+            {
+                var ver = typeof(MainViewModel).Assembly.GetName().Version;
+                return ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "v2.1.0";
+            }
+        }
 
-        /// <summary>Path of the Records.txt log file.</summary>
+        public string WindowTitle => $"BuildSmith Precision Suite — Tekla Model Copier ({AppVersion})";
+
         public string RecordsFilePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Records.txt");
 
         // ── Commands ─────────────────────────────────────────────────────
 
-        public ICommand AddCommand               { get; }
-        public ICommand EditCommand              { get; }
-        public ICommand DeleteCommand            { get; }
-        public ICommand CreateBackupCommand      { get; }
-        public ICommand CancelBackupCommand      { get; }
-        public ICommand SelectDualBackupCommand  { get; }
-        public ICommand SelectReserveOnlyCommand { get; }
-        public ICommand SelectCheckerOnlyCommand { get; }
-        public ICommand OpenConfigFileCommand    { get; }
-        public ICommand OpenRecordsFileCommand   { get; }
-        public ICommand InquireBackupsCommand    { get; }
-        public ICommand OpenSourceFolderCommand  { get; }
+        public ICommand AddCommand                        { get; }
+        public ICommand EditCommand                       { get; }
+        public ICommand DeleteCommand                     { get; }
+        public ICommand CreateBackupCommand               { get; }
+        public ICommand CancelBackupCommand               { get; }
+        public ICommand SelectDualBackupCommand           { get; }
+        public ICommand SelectReserveOnlyCommand          { get; }
+        public ICommand SelectCheckerOnlyCommand          { get; }
+        public ICommand OpenConfigFileCommand             { get; }
+        public ICommand OpenRecordsFileCommand            { get; }
+        public ICommand InquireBackupsCommand             { get; }
+        public ICommand OpenSourceFolderCommand           { get; }
+        public ICommand ClearSearchCommand                { get; }
+        public ICommand LaunchSelectedModelInTeklaCommand { get; }
+        public ICommand SelectSharedConfigCommand         { get; }
+        public ICommand ResetLocalConfigCommand           { get; }
+        public ICommand ReloadConfigCommand               { get; }
+        public ICommand DismissToastCommand               { get; }
 
         private static void OpenFileOrFolder(string path)
         {
@@ -301,6 +637,42 @@ namespace ModelCopier.ViewModels
             dialog.ShowDialog();
         }
 
+        private void ExecuteLaunchInTekla()
+        {
+            if (SelectedModel == null || !Directory.Exists(SelectedModel.SourcePath)) return;
+
+            bool launched = BackupService.LaunchInTekla(SelectedModel.SourcePath, _config.TeklaStructuresExePath);
+            if (!launched)
+            {
+                var prompt = MessageBox.Show(
+                    "TeklaStructures.exe could not be detected automatically.\n\n" +
+                    "Would you like to browse and locate TeklaStructures.exe manually?",
+                    "Tekla Not Found",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (prompt == MessageBoxResult.Yes)
+                {
+                    var dlg = new OpenFileDialog
+                    {
+                        Title = "Locate TeklaStructures.exe",
+                        Filter = "TeklaStructures (TeklaStructures.exe)|TeklaStructures.exe|All Executables (*.exe)|*.exe"
+                    };
+                    if (dlg.ShowDialog() == true)
+                    {
+                        _config.TeklaStructuresExePath = dlg.FileName;
+                        _configService.Save(_config);
+                        BackupService.LaunchInTekla(SelectedModel.SourcePath, _config.TeklaStructuresExePath);
+                        ShowToast("Tekla Configured", $"Saved Tekla executable path:\n{dlg.FileName}");
+                    }
+                }
+            }
+            else
+            {
+                ShowToast("Tekla Launched", $"Opening '{SelectedModel.Name}' in Tekla Structures…");
+            }
+        }
+
         // ── CRUD handlers ────────────────────────────────────────────────
 
         private void ExecuteAdd()
@@ -316,6 +688,7 @@ namespace ModelCopier.ViewModels
                 _configService.Save(_config);
                 SelectedModel = entry;
                 StatusMessage = $"Model '{entry.Name}' added.";
+                ShowToast("Model Added", $"Model '{entry.Name}' registered.");
             }
         }
 
@@ -328,7 +701,6 @@ namespace ModelCopier.ViewModels
 
             if (dialog.ShowDialog() == true)
             {
-                // Apply edited values back to the existing entry so INPC fires.
                 SelectedModel.Name               = vm.Name.Trim();
                 SelectedModel.SourcePath         = vm.SourcePath.Trim();
                 SelectedModel.ReserveTargetPath  = vm.ReserveTargetPath.Trim();
@@ -336,13 +708,14 @@ namespace ModelCopier.ViewModels
                 SelectedModel.IncludeBakFiles    = vm.IncludeBakFiles;
                 SelectedModel.TargetFolderSuffix = vm.TargetFolderSuffix.Trim();
 
-                // Sync viewmodel state
                 IncludeBakFiles    = vm.IncludeBakFiles;
                 TargetFolderSuffix = vm.TargetFolderSuffix.Trim();
 
                 _configService.Save(_config);
                 UpdateDestinationPreview();
+                _ = UpdateStorageInfoAsync();
                 StatusMessage = $"Model '{SelectedModel.Name}' updated.";
+                ShowToast("Model Updated", $"Changes saved for '{SelectedModel.Name}'.");
             }
         }
 
@@ -364,70 +737,70 @@ namespace ModelCopier.ViewModels
             Models.Remove(SelectedModel);
             _configService.Save(_config);
             StatusMessage = $"Model '{name}' removed.";
+            ShowToast("Model Removed", $"Removed '{name}' from registry.");
         }
 
         // ── Backup handler ───────────────────────────────────────────────
 
-        private async void ExecuteCreateBackup()
+        private async void ExecuteCreateBackup(bool isAutomated)
         {
             if (SelectedModel == null) return;
 
             // Guard: model source exists
             if (!Directory.Exists(SelectedModel.SourcePath))
             {
-                MessageBox.Show(
-                    $"Source model folder does not exist:\n\n{SelectedModel.SourcePath}\n\nPlease check path!",
-                    "Model Folder Not Found",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                if (!isAutomated)
+                {
+                    MessageBox.Show(
+                        $"Source model folder does not exist:\n\n{SelectedModel.SourcePath}\n\nPlease check path!",
+                        "Model Folder Not Found",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                StatusMessage = "Backup aborted: Source folder does not exist.";
                 return;
             }
 
             // Guard: at least one backup type must be ticked
             if (!CreateReserveBackup && !CreateCheckerBackup)
             {
-                MessageBox.Show(
-                    "Please select at least one backup mode (Reserve or Checker).",
-                    "No Backup Type Selected",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                if (!isAutomated)
+                {
+                    MessageBox.Show(
+                        "Please select at least one backup mode (Reserve or Checker).",
+                        "No Backup Type Selected",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
                 return;
             }
 
             // Guard: required target paths must be set
             if (CreateReserveBackup && string.IsNullOrWhiteSpace(SelectedModel.ReserveTargetPath))
             {
-                MessageBox.Show(
-                    "Reserve Backup is ticked but the Reserve Target Path is not configured.\n" +
-                    "Please edit the model entry first.",
-                    "Missing Path", MessageBoxButton.OK, MessageBoxImage.Warning);
+                if (!isAutomated)
+                {
+                    MessageBox.Show(
+                        "Reserve Backup is ticked but the Reserve Target Path is not configured.\n" +
+                        "Please edit the model entry first.",
+                        "Missing Path", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
                 return;
             }
             if (CreateCheckerBackup && string.IsNullOrWhiteSpace(SelectedModel.CheckerTargetPath))
             {
-                MessageBox.Show(
-                    "Checker Backup is ticked but the Checker Target Path is not configured.\n" +
-                    "Please edit the model entry first.",
-                    "Missing Path", MessageBoxButton.OK, MessageBoxImage.Warning);
+                if (!isAutomated)
+                {
+                    MessageBox.Show(
+                        "Checker Backup is ticked but the Checker Target Path is not configured.\n" +
+                        "Please edit the model entry first.",
+                        "Missing Path", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
                 return;
-            }
-
-            // Guard: warn if no suffix specified (avoids clashing with live model)
-            if (string.IsNullOrWhiteSpace(TargetFolderSuffix))
-            {
-                var prompt = MessageBox.Show(
-                    "No target folder suffix is specified.\n\n" +
-                    "Having a suffix is helpful in avoiding clash with live Tekla Structures model when both are opened.\n\n" +
-                    "Are you sure you want to proceed without a suffix?",
-                    "No Suffix Specified",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-
-                if (prompt != MessageBoxResult.Yes) return;
             }
 
             var model = SelectedModel;
             var now = DateTime.Now;
 
-            // Compute hierarchical destination paths (suffix always appended to model name after HHmm)
+            // Compute hierarchical destination paths
             string? reserveDest = CreateReserveBackup
                 ? BackupService.BuildBackupDestination(model.ReserveTargetPath, model.Name, now, TargetFolderSuffix)
                 : null;
@@ -436,31 +809,92 @@ namespace ModelCopier.ViewModels
                 ? BackupService.BuildBackupDestination(model.CheckerTargetPath, model.Name, now, TargetFolderSuffix)
                 : null;
 
-            // Target collision check (matching Form1.cs protection)
-            if (reserveDest != null && Directory.Exists(reserveDest) && Directory.EnumerateFileSystemEntries(reserveDest).Any())
+            var options = new BackupOptions
             {
-                var prompt = MessageBox.Show(
-                    $"The Reserve backup destination folder is not empty:\n\n{reserveDest}\n\n" +
-                    "A backup may have already been created for this time slice.\n" +
-                    "Do you want to overwrite existing files?\n\n" +
-                    "(Click 'No' to cancel and change the suffix or wait a minute)",
-                    "Folder Not Empty",
-                    MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                IncludeBakFiles      = IncludeBakFiles,
+                ExcludeMultiUserFlag = true,
+                ExcludeLockFiles     = true,
+                ExcludeTmpFiles      = true
+            };
 
-                if (prompt != MessageBoxResult.Yes) return;
+            // ── Target Drive Free Space Pre-Check ────────────────────────
+            long sourceSize = await Task.Run(() => BackupService.GetDirectorySize(model.SourcePath, options));
+
+            if (reserveDest != null)
+            {
+                long resFree = BackupService.GetDriveFreeSpace(reserveDest);
+                if (resFree >= 0 && resFree < sourceSize)
+                {
+                    string msg = $"Insufficient disk space on Reserve backup volume:\n\n" +
+                                 $"• Required: {BackupService.FormatBytes(sourceSize)}\n" +
+                                 $"• Available: {BackupService.FormatBytes(resFree)}\n\n" +
+                                 "Backup aborted to prevent disk exhaustion.";
+                    if (!isAutomated)
+                        MessageBox.Show(msg, "Insufficient Disk Space", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowToast("Disk Space Error", msg, isSuccess: false);
+                    StatusMessage = "Aborted: Insufficient disk space on Reserve drive.";
+                    return;
+                }
             }
 
-            if (checkerDest != null && Directory.Exists(checkerDest) && Directory.EnumerateFileSystemEntries(checkerDest).Any())
+            if (checkerDest != null)
             {
-                var prompt = MessageBox.Show(
-                    $"The Checker backup destination folder is not empty:\n\n{checkerDest}\n\n" +
-                    "A backup may have already been created for this time slice.\n" +
-                    "Do you want to overwrite existing files?\n\n" +
-                    "(Click 'No' to cancel and change the suffix or wait a minute)",
-                    "Folder Not Empty",
-                    MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                long chkFree = BackupService.GetDriveFreeSpace(checkerDest);
+                if (chkFree >= 0 && chkFree < sourceSize)
+                {
+                    string msg = $"Insufficient disk space on Checker backup volume:\n\n" +
+                                 $"• Required: {BackupService.FormatBytes(sourceSize)}\n" +
+                                 $"• Available: {BackupService.FormatBytes(chkFree)}\n\n" +
+                                 "Backup aborted to prevent disk exhaustion.";
+                    if (!isAutomated)
+                        MessageBox.Show(msg, "Insufficient Disk Space", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowToast("Disk Space Error", msg, isSuccess: false);
+                    StatusMessage = "Aborted: Insufficient disk space on Checker drive.";
+                    return;
+                }
+            }
 
-                if (prompt != MessageBoxResult.Yes) return;
+            // ── Interactive collision and suffix warnings ────────────────
+            if (!isAutomated)
+            {
+                if (string.IsNullOrWhiteSpace(TargetFolderSuffix))
+                {
+                    var prompt = MessageBox.Show(
+                        "No target folder suffix is specified.\n\n" +
+                        "Having a suffix is helpful in avoiding clash with live Tekla Structures model when both are opened.\n\n" +
+                        "Are you sure you want to proceed without a suffix?",
+                        "No Suffix Specified",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (prompt != MessageBoxResult.Yes) return;
+                }
+
+                if (reserveDest != null && Directory.Exists(reserveDest) && Directory.EnumerateFileSystemEntries(reserveDest).Any())
+                {
+                    var prompt = MessageBox.Show(
+                        $"The Reserve backup destination folder is not empty:\n\n{reserveDest}\n\n" +
+                        "A backup may have already been created for this time slice.\n" +
+                        "Do you want to overwrite existing files?\n\n" +
+                        "(Click 'No' to cancel and change the suffix or wait a minute)",
+                        "Folder Not Empty",
+                        MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+                    if (prompt != MessageBoxResult.Yes) return;
+                }
+
+                if (checkerDest != null && Directory.Exists(checkerDest) && Directory.EnumerateFileSystemEntries(checkerDest).Any())
+                {
+                    var prompt = MessageBox.Show(
+                        $"The Checker backup destination folder is not empty:\n\n{checkerDest}\n\n" +
+                        "A backup may have already been created for this time slice.\n" +
+                        "Do you want to overwrite existing files?\n\n" +
+                        "(Click 'No' to cancel and change the suffix or wait a minute)",
+                        "Folder Not Empty",
+                        MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+                    if (prompt != MessageBoxResult.Yes) return;
+                }
             }
 
             // --- Begin copy ---
@@ -480,14 +914,6 @@ namespace ModelCopier.ViewModels
                 ProgressTotal      = p.TotalFiles;
                 ProgressText       = $"Copying {p.CopiedFiles} / {p.TotalFiles}: {p.CurrentFile}  ({p.SkippedFiles} skipped)";
             });
-
-            var options = new BackupOptions
-            {
-                IncludeBakFiles      = IncludeBakFiles,
-                ExcludeMultiUserFlag = true,
-                ExcludeLockFiles     = true,
-                ExcludeTmpFiles      = true
-            };
 
             int totalCopied  = 0;
             int totalSkipped = 0;
@@ -533,27 +959,42 @@ namespace ModelCopier.ViewModels
                 ProgressText       = $"Completed ✓ ({totalCopied} files copied, {totalSkipped} skipped)";
                 StatusMessage      = $"Backup completed in {FormatDuration(totalDuration)} ({totalCopied} copied, {totalSkipped} skipped).";
 
-                string finishMsg = $"Model '{model.Name}' backup completed successfully!\n\n" +
-                                   $"• Files copied: {totalCopied}\n" +
-                                   $"• Database files renamed: {totalRenamed} (*.db1, *.db2 matching '{Path.GetFileName(reserveDest ?? checkerDest)}')\n" +
-                                   $"• Files skipped: {totalSkipped} (single-user converted, locks/bak skipped)\n" +
-                                   $"• Time taken: {FormatDuration(totalDuration)}";
+                // Surface Chime, Taskbar Flash, and Toast Notification
+                ShowToast(
+                    "Replication Succeeded ✓",
+                    $"{model.Name} backed up in {FormatDuration(totalDuration)} ({totalCopied} files copied).");
 
-                MessageBox.Show(finishMsg, "Backup Succeeded", MessageBoxButton.OK, MessageBoxImage.Information);
+                _ = UpdateStorageInfoAsync();
+
+                if (!isAutomated)
+                {
+                    string finishMsg = $"Model '{model.Name}' backup completed successfully!\n\n" +
+                                       $"• Files copied: {totalCopied}\n" +
+                                       $"• Database files renamed: {totalRenamed} (*.db1, *.db2 matching '{Path.GetFileName(reserveDest ?? checkerDest)}')\n" +
+                                       $"• Files skipped: {totalSkipped} (single-user converted, locks/bak skipped)\n" +
+                                       $"• Time taken: {FormatDuration(totalDuration)}";
+
+                    MessageBox.Show(finishMsg, "Backup Succeeded", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
             }
             catch (OperationCanceledException)
             {
                 StatusMessage = "Backup cancelled by user.";
                 ProgressText  = "Cancelled.";
+                ShowToast("Backup Cancelled", "Replication was stopped by user.", isSuccess: false);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    $"Backup failed:\n\n{ex.Message}",
-                    "Backup Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                if (!isAutomated)
+                {
+                    MessageBox.Show(
+                        $"Backup failed:\n\n{ex.Message}",
+                        "Backup Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                }
                 StatusMessage = $"Error: {ex.Message}";
                 ProgressText  = "Failed.";
+                ShowToast("Backup Failed ✕", ex.Message, isSuccess: false);
             }
             finally
             {
@@ -568,6 +1009,46 @@ namespace ModelCopier.ViewModels
             if (ts.TotalSeconds >= 60)
                 return $"{(int)ts.TotalMinutes} min {ts.Seconds} sec";
             return $"{ts.TotalSeconds:0.0} sec";
+        }
+
+        // ── Win32 Window Flash Helper ────────────────────────────────────
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FLASHWINFO
+        {
+            public uint cbSize;
+            public IntPtr hwnd;
+            public uint dwFlags;
+            public uint uCount;
+            public uint dwTimeout;
+        }
+
+        private const uint FLASHW_ALL = 3;
+        private const uint FLASHW_TIMERNOFG = 12;
+
+        private static void FlashWindow(Window window)
+        {
+            try
+            {
+                var helper = new WindowInteropHelper(window);
+                if (helper.Handle != IntPtr.Zero)
+                {
+                    var info = new FLASHWINFO
+                    {
+                        cbSize = (uint)Marshal.SizeOf<FLASHWINFO>(),
+                        hwnd = helper.Handle,
+                        dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG,
+                        uCount = 3,
+                        dwTimeout = 0
+                    };
+                    FlashWindowEx(ref info);
+                }
+            }
+            catch { }
         }
     }
 }

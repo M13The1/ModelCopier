@@ -254,6 +254,124 @@ namespace ModelCopier.Services
             return relativePath;
         }
 
+        // ── Disk Space & Tekla Launch Helpers ────────────────────────────
+
+        /// <summary>Returns available free space in bytes on the drive containing the specified path.</summary>
+        public static long GetDriveFreeSpace(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return -1;
+            try
+            {
+                string fullPath = Path.GetFullPath(path);
+                string? root = Path.GetPathRoot(fullPath);
+                if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
+                {
+                    var drive = new DriveInfo(root);
+                    return drive.AvailableFreeSpace;
+                }
+            }
+            catch { }
+            return -1;
+        }
+
+        /// <summary>Calculates total bytes for files to be copied from a directory.</summary>
+        public static long GetDirectorySize(string directory, BackupOptions? options = null)
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                return 0;
+
+            long totalBytes = 0;
+            try
+            {
+                var allFiles = CollectFiles(directory);
+                foreach (var f in allFiles)
+                {
+                    if (options != null && ShouldIgnoreFile(f, options, out _))
+                        continue;
+
+                    try
+                    {
+                        totalBytes += new FileInfo(f).Length;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return totalBytes;
+        }
+
+        /// <summary>Formats bytes into human readable format (e.g. 1.25 GB, 350 MB).</summary>
+        public static string FormatBytes(long bytes)
+        {
+            if (bytes < 0) return "Unknown";
+            string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+            int i = 0;
+            double d = bytes;
+            while (d >= 1024 && i < suffixes.Length - 1)
+            {
+                d /= 1024;
+                i++;
+            }
+            return $"{d:0.##} {suffixes[i]}";
+        }
+
+        /// <summary>Finds installed TeklaStructures.exe binaries on the machine.</summary>
+        public static List<string> FindTeklaInstallations()
+        {
+            var found = new List<string>();
+            string[] searchBases = {
+                @"C:\Program Files\Trimble\Tekla Structures",
+                @"C:\Program Files\Tekla Structures",
+                @"C:\TeklaStructures"
+            };
+
+            foreach (var b in searchBases)
+            {
+                if (Directory.Exists(b))
+                {
+                    try
+                    {
+                        var matches = Directory.GetFiles(b, "TeklaStructures.exe", SearchOption.AllDirectories);
+                        found.AddRange(matches);
+                    }
+                    catch { }
+                }
+            }
+
+            return found.Distinct().OrderByDescending(p => p).ToList();
+        }
+
+        /// <summary>Launches a model folder directly in Tekla Structures.</summary>
+        public static bool LaunchInTekla(string modelPath, string? customTeklaExe = null)
+        {
+            if (!Directory.Exists(modelPath)) return false;
+
+            string? exePath = customTeklaExe;
+            if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+            {
+                var installed = FindTeklaInstallations();
+                exePath = installed.FirstOrDefault();
+            }
+
+            if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+                return false;
+
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = exePath,
+                    Arguments = $"\"{modelPath}\"",
+                    UseShellExecute = true
+                });
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         // ── Helpers ──────────────────────────────────────────────────────
 
         private static bool ShouldIgnoreFile(string filePath, BackupOptions options, out string reason)

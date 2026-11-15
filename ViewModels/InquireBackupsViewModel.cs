@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Windows;
 using System.Windows.Input;
 using ModelCopier.Models;
 using ModelCopier.Services;
@@ -41,6 +42,24 @@ namespace ModelCopier.ViewModels
                         });
                     }
                     catch { }
+                }
+            });
+
+            LaunchInTeklaCommand = new RelayCommand(param =>
+            {
+                string? path = param as string ?? SourcePath;
+                if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                {
+                    bool launched = BackupService.LaunchInTekla(path);
+                    if (!launched)
+                    {
+                        MessageBox.Show(
+                            "Tekla Structures executable was not found automatically.\n" +
+                            "Please ensure Tekla Structures is installed in standard Program Files directory.",
+                            "Tekla Not Found",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
                 }
             });
 
@@ -87,6 +106,7 @@ namespace ModelCopier.ViewModels
         public ObservableCollection<BackupSnapshotInfo> CheckerBackups { get; }
 
         public ICommand OpenFolderCommand { get; }
+        public ICommand LaunchInTeklaCommand { get; }
         public ICommand RefreshCommand { get; }
 
         public void Refresh()

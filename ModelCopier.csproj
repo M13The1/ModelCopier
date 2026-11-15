@@ -8,5 +8,11 @@
     <AssemblyName>ModelCopier</AssemblyName>
     <RootNamespace>ModelCopier</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>2.1.0</Version>
+    <AssemblyVersion>2.1.0.0</AssemblyVersion>
+    <FileVersion>2.1.0.0</FileVersion>
+    <Product>BuildSmith Precision Suite — Tekla Model Copier</Product>
+    <Company>M13 Precision Systems</Company>
+    <Description>High-precision dual-target replication and backup manager for Tekla Structures models.</Description>
   </PropertyGroup>
 </Project>

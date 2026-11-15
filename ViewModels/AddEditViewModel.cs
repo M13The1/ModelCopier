@@ -12,11 +12,13 @@ namespace ModelCopier.ViewModels
     public class AddEditViewModel : ViewModelBase
     {
         // Backing fields
-        private string _name             = string.Empty;
-        private string _sourcePath       = string.Empty;
-        private string _reserveTargetPath = string.Empty;
-        private string _checkerTargetPath = string.Empty;
-        private string _validationError  = string.Empty;
+        private string _name               = string.Empty;
+        private string _sourcePath         = string.Empty;
+        private string _reserveTargetPath   = string.Empty;
+        private string _checkerTargetPath   = string.Empty;
+        private bool   _includeBakFiles     = false;
+        private string _targetFolderSuffix  = string.Empty;
+        private string _validationError    = string.Empty;
 
         // ── Constructors ─────────────────────────────────────────────────
 
@@ -30,11 +32,13 @@ namespace ModelCopier.ViewModels
         /// <summary>Pre-populates fields from an existing entry (Edit mode).</summary>
         public AddEditViewModel(ModelEntry entry)
         {
-            _name              = entry.Name;
-            _sourcePath        = entry.SourcePath;
-            _reserveTargetPath = entry.ReserveTargetPath;
-            _checkerTargetPath = entry.CheckerTargetPath;
-            IsEditMode         = true;
+            _name               = entry.Name;
+            _sourcePath         = entry.SourcePath;
+            _reserveTargetPath   = entry.ReserveTargetPath;
+            _checkerTargetPath   = entry.CheckerTargetPath;
+            _includeBakFiles     = entry.IncludeBakFiles;
+            _targetFolderSuffix  = entry.TargetFolderSuffix;
+            IsEditMode          = true;
             InitCommands();
         }
 
@@ -66,6 +70,18 @@ namespace ModelCopier.ViewModels
         {
             get => _checkerTargetPath;
             set => SetField(ref _checkerTargetPath, value);
+        }
+
+        public bool IncludeBakFiles
+        {
+            get => _includeBakFiles;
+            set => SetField(ref _includeBakFiles, value);
+        }
+
+        public string TargetFolderSuffix
+        {
+            get => _targetFolderSuffix;
+            set => SetField(ref _targetFolderSuffix, value);
         }
 
         public string ValidationError
@@ -147,11 +163,13 @@ namespace ModelCopier.ViewModels
         /// </summary>
         public ModelEntry ToModelEntry(string? existingId = null) => new()
         {
-            Id                = existingId ?? Guid.NewGuid().ToString(),
-            Name              = Name.Trim(),
-            SourcePath        = SourcePath.Trim(),
-            ReserveTargetPath = ReserveTargetPath.Trim(),
-            CheckerTargetPath = CheckerTargetPath.Trim()
+            Id                 = existingId ?? Guid.NewGuid().ToString(),
+            Name               = Name.Trim(),
+            SourcePath         = SourcePath.Trim(),
+            ReserveTargetPath  = ReserveTargetPath.Trim(),
+            CheckerTargetPath  = CheckerTargetPath.Trim(),
+            IncludeBakFiles    = IncludeBakFiles,
+            TargetFolderSuffix = TargetFolderSuffix?.Trim() ?? string.Empty
         };
     }
 }

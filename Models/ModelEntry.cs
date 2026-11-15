@@ -19,6 +19,8 @@ namespace ModelCopier.Models
         private string _checkerTargetPath = string.Empty;
         private DateTime? _lastReserveBackup;
         private DateTime? _lastCheckerBackup;
+        private bool _includeBakFiles = false;
+        private string _targetFolderSuffix = string.Empty;
 
         // ── Persisted properties ──────────────────────────────────────────
 
@@ -54,6 +56,20 @@ namespace ModelCopier.Models
         {
             get => _checkerTargetPath;
             set => SetField(ref _checkerTargetPath, value);
+        }
+
+        /// <summary>Whether to copy *.bak files when replicating this model.</summary>
+        public bool IncludeBakFiles
+        {
+            get => _includeBakFiles;
+            set => SetField(ref _includeBakFiles, value);
+        }
+
+        /// <summary>Optional custom suffix appended to the inner model folder (e.g. QC, RevA).</summary>
+        public string TargetFolderSuffix
+        {
+            get => _targetFolderSuffix;
+            set => SetField(ref _targetFolderSuffix, value);
         }
 
         /// <summary>UTC timestamp of the most recent successful Reserve backup.</summary>

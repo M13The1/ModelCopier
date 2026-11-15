@@ -438,6 +438,26 @@
         </Style>
 
         <!-- ═══════════════════════════════════════════════════════════════
+             COMBOBOX (BuildSmith Dark Style)
+        ════════════════════════════════════════════════════════════════ -->
+        <Style TargetType="ComboBox">
+            <Setter Property="Background"      Value="{StaticResource SurfaceDarkBrush}"/>
+            <Setter Property="Foreground"      Value="{StaticResource PrimaryTextBrush}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource CardBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding"         Value="8,4"/>
+            <Setter Property="FontSize"        Value="11"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background"      Value="{StaticResource CardBrush}"/>
+            <Setter Property="Foreground"      Value="{StaticResource PrimaryTextBrush}"/>
+            <Setter Property="Padding"         Value="8,6"/>
+            <Setter Property="FontSize"        Value="11"/>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════════════════════════
              DATAGRID (BuildSmith Dark Slate)
         ════════════════════════════════════════════════════════════════ -->
         <Style TargetType="DataGrid">

@@ -79,9 +79,15 @@
                             Style="{StaticResource ActiveNavPillStyle}"
                             Margin="0,0,4,0"/>
                     <Button Content="📁  Backups"
+                            Command="{Binding InquireBackupsCommand}"
                             Style="{StaticResource InactiveNavPillStyle}"
                             Margin="0,0,4,0"/>
                     <Button Content="📊  Integrity"
+                            Command="{Binding InquireBackupsCommand}"
+                            Style="{StaticResource InactiveNavPillStyle}"
+                            Margin="0,0,4,0"/>
+                    <Button Content="📜  Records"
+                            Command="{Binding OpenRecordsFileCommand}"
                             Style="{StaticResource InactiveNavPillStyle}"
                             Margin="0,0,4,0"/>
                     <Button Content="⚙  Config"
@@ -174,6 +180,16 @@
 
                     <Button Content="Checker Only (Type 2)"
                             Command="{Binding SelectCheckerOnlyCommand}"
+                            Style="{StaticResource PillPresetButtonStyle}"
+                            Margin="0,0,8,0"/>
+
+                    <Button Content="🔍 Inquire Backups"
+                            Command="{Binding InquireBackupsCommand}"
+                            Style="{StaticResource PillPresetButtonStyle}"
+                            Margin="0,0,8,0"/>
+
+                    <Button Content="📜 View Records"
+                            Command="{Binding OpenRecordsFileCommand}"
                             Style="{StaticResource PillPresetButtonStyle}"
                             Margin="0,0,8,0"/>
 
@@ -450,6 +466,64 @@
                                 </CheckBox>
                             </Grid>
 
+                            <!-- ── SECTION 1B: BACKUP CONFIGURATION & SUFFIX ── -->
+                            <Border Background="{StaticResource SurfaceDarkBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12,10"
+                                    Margin="0,0,0,14">
+                                <StackPanel>
+                                    <DockPanel LastChildFill="False" Margin="0,0,0,8">
+                                        <TextBlock DockPanel.Dock="Left"
+                                                   Text="⚙  BACKUP OPTIONS &amp; SUFFIX"
+                                                   FontSize="10" FontWeight="Bold"
+                                                   Foreground="{StaticResource SecondaryTextBrush}"/>
+                                        <CheckBox DockPanel.Dock="Right"
+                                                  Content="Include *.bak files"
+                                                  IsChecked="{Binding IncludeBakFiles, Mode=TwoWay}"
+                                                  FontSize="10"
+                                                  Foreground="{StaticResource PrimaryLightBrush}"
+                                                  ToolTip="When unchecked (recommended), Tekla *.bak backup files are excluded to save disk space"/>
+                                    </DockPanel>
+
+                                    <!-- Target Folder Suffix -->
+                                    <TextBlock Text="TARGET FOLDER SUFFIX"
+                                               Style="{StaticResource FieldLabelStyle}"
+                                               Margin="0,0,0,3"/>
+                                    <TextBox Text="{Binding TargetFolderSuffix, UpdateSourceTrigger=PropertyChanged}"
+                                             GotFocus="OnSuffixGotFocus"
+                                             LostFocus="OnSuffixLostFocus"
+                                             TextChanged="OnSuffixTextChanged"
+                                             ToolTip="Suffix appended to the model name folder (e.g. QC, RevA, Backup) to prevent clash with live model"
+                                             Padding="8,6"
+                                             FontSize="11"
+                                             Margin="0,0,0,3"/>
+                                    <TextBlock Text="Suffix is always appended to the model folder after HHmm to avoid clash when live &amp; backup models are open."
+                                               FontSize="9"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Margin="0,0,0,8"/>
+
+                                    <!-- Live Destination Path Preview -->
+                                    <TextBlock Text="DESTINATION FOLDER PREVIEW"
+                                               FontSize="9" FontWeight="Bold"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Margin="0,0,0,3"/>
+                                    <Border Background="#050B16"
+                                            BorderBrush="#15243E"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="8,5">
+                                        <TextBlock Text="{Binding DestinationPreview}"
+                                                   FontSize="10"
+                                                   FontFamily="Consolas"
+                                                   Foreground="{StaticResource AccentCyanBrush}"
+                                                   TextWrapping="Wrap"
+                                                   ToolTip="{Binding DestinationPreview}"/>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
                             <!-- ── SECTION 2: INPUT SPECIFICATIONS (DIRECTORIES) ── -->
                             <TextBlock Text="📋  Target Specifications &amp; Directory Paths"
                                        FontSize="11" FontWeight="Bold"
@@ -570,6 +644,14 @@
                                     </StackPanel>
                                 </Border>
                             </Grid>
+
+                            <!-- Inquire Backups Button -->
+                            <Button Content="🔍  Inquire Today's Backups &amp; Check Integrity"
+                                    Command="{Binding InquireBackupsCommand}"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    HorizontalAlignment="Stretch"
+                                    Padding="0,8"
+                                    Margin="0,0,0,10"/>
 
                             <!-- ── SECTION 4: ACTION CTA BUTTON ── -->
                             <Button Content="▶   EXECUTE MODEL REPLICATION"

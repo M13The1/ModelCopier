@@ -18,7 +18,7 @@ namespace ModelCopier.ViewModels
         private string _checkerTargetPath   = string.Empty;
         private string _incrementalTargetPath = string.Empty;
         private bool   _includeBakFiles     = false;
-        private string _targetFolderSuffix  = string.Empty;
+        private string _targetFolderSuffix  = "_bak";
         private bool   _enableAutoBackup    = false;
         private bool   _enableIncrementalBackup = false;
         private string _validationError    = string.Empty;
@@ -57,14 +57,60 @@ namespace ModelCopier.ViewModels
         public string Name
         {
             get => _name;
-            set => SetField(ref _name, value);
+            set
+            {
+                if (SetField(ref _name, value))
+                {
+                    if (!string.IsNullOrWhiteSpace(_sourcePath))
+                    {
+                        string normalized = ModelEntry.NormalizeSourcePath(_sourcePath, _name);
+                        if (!string.Equals(_sourcePath, normalized, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _sourcePath = normalized;
+                            OnPropertyChanged(nameof(SourcePath));
+                        }
+                    }
+                    OnPropertyChanged(nameof(LiveModelPathPreview));
+                    OnPropertyChanged(nameof(IsModelFolderFound));
+                }
+            }
         }
 
         public string SourcePath
         {
             get => _sourcePath;
-            set => SetField(ref _sourcePath, value);
+            set
+            {
+                string normalized = ModelEntry.NormalizeSourcePath(value, _name);
+                if (SetField(ref _sourcePath, normalized))
+                {
+                    OnPropertyChanged(nameof(LiveModelPathPreview));
+                    OnPropertyChanged(nameof(IsModelFolderFound));
+                }
+            }
         }
+
+        /// <summary>Resolved full path to the live model subfolder.</summary>
+        public string LiveModelPathPreview
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(SourcePath)) return string.Empty;
+                if (string.IsNullOrWhiteSpace(Name)) return SourcePath;
+
+                string clean = SourcePath.Trim().TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+                string lastSegment = System.IO.Path.GetFileName(clean);
+                if (string.Equals(lastSegment, Name.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return clean;
+                }
+                return System.IO.Path.Combine(clean, Name.Trim());
+            }
+        }
+
+        /// <summary>True if the model subfolder exists inside the source repository.</summary>
+        public bool IsModelFolderFound =>
+            !string.IsNullOrWhiteSpace(LiveModelPathPreview) && System.IO.Directory.Exists(LiveModelPathPreview);
 
         public string ReserveTargetPath
         {
@@ -131,8 +177,21 @@ namespace ModelCopier.ViewModels
         {
             BrowseSourceCommand = new RelayCommand(_ =>
             {
-                string? path = BrowseFolder("Select Source Model Folder");
-                if (path != null) SourcePath = path;
+                string? path = BrowseFolder("Select Source Model Folder or Repository");
+                if (path != null)
+                {
+                    string clean = path.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+                    if (string.IsNullOrWhiteSpace(Name))
+                    {
+                        Name = System.IO.Path.GetFileName(clean);
+                        string? parent = System.IO.Path.GetDirectoryName(clean);
+                        SourcePath = !string.IsNullOrWhiteSpace(parent) ? parent : clean;
+                    }
+                    else
+                    {
+                        SourcePath = ModelEntry.NormalizeSourcePath(clean, Name);
+                    }
+                }
             });
 
             BrowseReserveCommand = new RelayCommand(_ =>
@@ -173,7 +232,20 @@ namespace ModelCopier.ViewModels
 
             if (string.IsNullOrWhiteSpace(SourcePath))
             {
-                ValidationError = "Source folder path is required.";
+                ValidationError = "Source repository path is required.";
+                return false;
+            }
+
+            if (!System.IO.Directory.Exists(SourcePath))
+            {
+                ValidationError = $"Source path '{SourcePath}' does not exist.";
+                return false;
+            }
+
+            string liveModelPath = LiveModelPathPreview;
+            if (!System.IO.Directory.Exists(liveModelPath))
+            {
+                ValidationError = $"Model subfolder '{Name}' was not found in source path '{SourcePath}'. Application can only copy the model folder if it exists.";
                 return false;
             }
 
@@ -202,7 +274,7 @@ namespace ModelCopier.ViewModels
             CheckerTargetPath     = CheckerTargetPath.Trim(),
             IncrementalTargetPath = IncrementalTargetPath?.Trim() ?? string.Empty,
             IncludeBakFiles       = IncludeBakFiles,
-            TargetFolderSuffix    = TargetFolderSuffix?.Trim() ?? string.Empty,
+            TargetFolderSuffix    = ModelEntry.NormalizeSuffix(TargetFolderSuffix),
             EnableAutoBackup      = EnableAutoBackup,
             EnableIncrementalBackup = EnableIncrementalBackup
         };

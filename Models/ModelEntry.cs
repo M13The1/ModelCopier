@@ -22,7 +22,7 @@ namespace ModelCopier.Models
         private DateTime? _lastCheckerBackup;
         private DateTime? _lastIncrementalBackup;
         private bool _includeBakFiles = false;
-        private string _targetFolderSuffix = string.Empty;
+        private string _targetFolderSuffix = "_bak";
         private bool _enableAutoBackup = false;
         private bool _enableIncrementalBackup = false;
 
@@ -34,19 +34,90 @@ namespace ModelCopier.Models
             set => SetField(ref _id, value);
         }
 
-        /// <summary>Display name shown in the list.</summary>
+        /// <summary>Display name of the model (folder name inside the source path).</summary>
         public string Name
         {
             get => _name;
-            set => SetField(ref _name, value);
+            set
+            {
+                if (SetField(ref _name, value))
+                {
+                    if (!string.IsNullOrWhiteSpace(_sourcePath))
+                    {
+                        string normalized = NormalizeSourcePath(_sourcePath, _name);
+                        if (!string.Equals(_sourcePath, normalized, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _sourcePath = normalized;
+                            OnPropertyChanged(nameof(SourcePath));
+                        }
+                    }
+                    OnPropertyChanged(nameof(LiveModelPath));
+                    OnPropertyChanged(nameof(ModelFolderExists));
+                }
+            }
         }
 
-        /// <summary>Full path of the Tekla model folder to copy from.</summary>
+        /// <summary>Parent repository folder where the model folder resides (e.g. D:\LiveModels).</summary>
         public string SourcePath
         {
             get => _sourcePath;
-            set => SetField(ref _sourcePath, value);
+            set
+            {
+                string normalized = NormalizeSourcePath(value, _name);
+                if (SetField(ref _sourcePath, normalized))
+                {
+                    OnPropertyChanged(nameof(LiveModelPath));
+                    OnPropertyChanged(nameof(ModelFolderExists));
+                }
+            }
         }
+
+        /// <summary>
+        /// Normalizes a source path so that it represents the parent repository directory,
+        /// ensuring the model name is not duplicated at the end of the SourcePath.
+        /// E.g. 'D:\LiveModels\M2610-01_FD_DUCT' with Name 'M2610-01_FD_DUCT' becomes 'D:\LiveModels'.
+        /// </summary>
+        public static string NormalizeSourcePath(string? sourcePath, string? modelName)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath)) return string.Empty;
+            string clean = sourcePath.Trim().TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+            if (string.IsNullOrWhiteSpace(modelName)) return clean;
+
+            string lastSegment = System.IO.Path.GetFileName(clean);
+            if (string.Equals(lastSegment, modelName.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                string? parent = System.IO.Path.GetDirectoryName(clean);
+                return !string.IsNullOrWhiteSpace(parent) ? parent : clean;
+            }
+            return clean;
+        }
+
+        /// <summary>
+        /// Full path to the actual Tekla model folder on disk.
+        /// Combines SourcePath and Name (e.g. 'D:\LiveModels\M2610-01_FD_DUCT').
+        /// If SourcePath already ended with the model name, returns it directly.
+        /// </summary>
+        [JsonIgnore]
+        public string LiveModelPath
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(SourcePath)) return string.Empty;
+                if (string.IsNullOrWhiteSpace(Name)) return SourcePath;
+
+                string clean = SourcePath.Trim().TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+                string lastSegment = System.IO.Path.GetFileName(clean);
+                if (string.Equals(lastSegment, Name.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return clean;
+                }
+                return System.IO.Path.Combine(clean, Name.Trim());
+            }
+        }
+
+        /// <summary>Whether the specific model folder exists inside the source repository.</summary>
+        [JsonIgnore]
+        public bool ModelFolderExists => !string.IsNullOrWhiteSpace(LiveModelPath) && System.IO.Directory.Exists(LiveModelPath);
 
         /// <summary>Root folder where Reserve (Type 1) backups are written.</summary>
         public string ReserveTargetPath
@@ -76,11 +147,26 @@ namespace ModelCopier.Models
             set => SetField(ref _includeBakFiles, value);
         }
 
-        /// <summary>Optional custom suffix appended to the inner model folder (e.g. QC, RevA).</summary>
+        /// <summary>Optional custom suffix appended to the inner model folder (default _bak, e.g. _QC, _RevA).</summary>
         public string TargetFolderSuffix
         {
             get => _targetFolderSuffix;
-            set => SetField(ref _targetFolderSuffix, value);
+            set => SetField(ref _targetFolderSuffix, NormalizeSuffix(value));
+        }
+
+        /// <summary>
+        /// Normalizes suffix so that if not empty and doesn't start with '_', auto-adds '_'.
+        /// If empty/whitespace, returns empty string so user can choose to remove it.
+        /// </summary>
+        public static string NormalizeSuffix(string? suffix)
+        {
+            if (string.IsNullOrWhiteSpace(suffix)) return string.Empty;
+            string clean = suffix.Trim();
+            if (!clean.StartsWith("_"))
+            {
+                clean = "_" + clean;
+            }
+            return clean;
         }
 
         /// <summary>Whether this specific model is included in automated scheduled backups.</summary>

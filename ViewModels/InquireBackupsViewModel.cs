@@ -22,7 +22,7 @@ namespace ModelCopier.ViewModels
         {
             _model = model;
             ModelName = model.Name;
-            SourcePath = model.SourcePath;
+            SourcePath = model.LiveModelPath;
             ReserveTargetPath = model.ReserveTargetPath;
             CheckerTargetPath = model.CheckerTargetPath;
 
@@ -112,7 +112,7 @@ namespace ModelCopier.ViewModels
         public void Refresh()
         {
             // 1. Live stats
-            var stats = BackupService.GetModelStats(_model.SourcePath);
+            var stats = BackupService.GetModelStats(_model.LiveModelPath);
             LiveFileCount = stats.FileCount;
             LiveSubFolderCount = stats.SubFolderCount;
             LiveBakCount = stats.BakFileCount;

@@ -35,7 +35,7 @@ namespace ModelCopier.ViewModels
         private bool         _createReserveBackup = true;
         private bool         _createCheckerBackup = true;
         private bool         _includeBakFiles     = false;
-        private string       _targetFolderSuffix  = string.Empty;
+        private string       _targetFolderSuffix  = "_bak";
         private string       _destinationPreview  = string.Empty;
         private bool         _isBusy;
         private double       _progressPercentage;
@@ -124,9 +124,15 @@ namespace ModelCopier.ViewModels
             InquireBackupsCommand    = new RelayCommand(_ => ExecuteInquireBackups(), _ => SelectedModel != null);
             OpenSourceFolderCommand  = new RelayCommand(_ =>
             {
-                if (SelectedModel != null && Directory.Exists(SelectedModel.SourcePath))
-                    OpenFileOrFolder(SelectedModel.SourcePath);
-            }, _ => SelectedModel != null && !string.IsNullOrWhiteSpace(SelectedModel.SourcePath));
+                if (SelectedModel != null)
+                {
+                    string target = Directory.Exists(SelectedModel.LiveModelPath)
+                        ? SelectedModel.LiveModelPath
+                        : SelectedModel.SourcePath;
+                    if (Directory.Exists(target))
+                        OpenFileOrFolder(target);
+                }
+            }, _ => SelectedModel != null && (!string.IsNullOrWhiteSpace(SelectedModel.LiveModelPath) || !string.IsNullOrWhiteSpace(SelectedModel.SourcePath)));
 
             ClearSearchCommand = new RelayCommand(_ => SearchText = string.Empty);
             LaunchSelectedModelInTeklaCommand = new RelayCommand(_ => ExecuteLaunchInTekla(), _ => SelectedModel != null);
@@ -206,6 +212,7 @@ namespace ModelCopier.ViewModels
                 string query = _searchText.Trim();
                 return (entry.Name != null && entry.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                        (entry.SourcePath != null && entry.SourcePath.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                       (entry.LiveModelPath != null && entry.LiveModelPath.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                        (entry.ReserveTargetPath != null && entry.ReserveTargetPath.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                        (entry.CheckerTargetPath != null && entry.CheckerTargetPath.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                        (entry.IncrementalTargetPath != null && entry.IncrementalTargetPath.Contains(query, StringComparison.OrdinalIgnoreCase));
@@ -227,7 +234,7 @@ namespace ModelCopier.ViewModels
                     if (_selectedModel != null)
                     {
                         _includeBakFiles    = _selectedModel.IncludeBakFiles;
-                        _targetFolderSuffix = _selectedModel.TargetFolderSuffix ?? string.Empty;
+                        _targetFolderSuffix = !string.IsNullOrWhiteSpace(_selectedModel.TargetFolderSuffix) ? _selectedModel.TargetFolderSuffix : "_bak";
 
                         OnPropertyChanged(nameof(IncludeBakFiles));
                         OnPropertyChanged(nameof(TargetFolderSuffix));
@@ -299,7 +306,7 @@ namespace ModelCopier.ViewModels
             // Calculate source model size on background thread
             SourceModelSizeText = "Calculating…";
             var options = new BackupOptions { IncludeBakFiles = IncludeBakFiles };
-            long size = await Task.Run(() => BackupService.GetDirectorySize(model.SourcePath, options));
+            long size = await Task.Run(() => BackupService.GetDirectorySize(model.LiveModelPath, options));
 
             if (SelectedModel == model)
             {
@@ -503,9 +510,9 @@ namespace ModelCopier.ViewModels
                     if (token.IsCancellationRequested) break;
 
                     var model = targets[i];
-                    if (!Directory.Exists(model.SourcePath))
+                    if (!Directory.Exists(model.LiveModelPath))
                     {
-                        StatusMessage = $"Auto-backup skipped '{model.Name}': Source folder missing.";
+                        StatusMessage = $"Auto-backup skipped '{model.Name}': Model folder not found at '{model.LiveModelPath}'.";
                         continue;
                     }
 
@@ -537,7 +544,7 @@ namespace ModelCopier.ViewModels
 
                     if (reserveDest != null && !token.IsCancellationRequested)
                     {
-                        var result = await _backupService.CopyFolderAsync(model.SourcePath, reserveDest, options, progress, token);
+                        var result = await _backupService.CopyFolderAsync(model.LiveModelPath, reserveDest, options, progress, token);
                         model.LastReserveBackup = DateTime.UtcNow;
                         totalCopiedAcrossModels += result.CopiedFiles;
                         BackupService.AppendRecord(
@@ -546,7 +553,7 @@ namespace ModelCopier.ViewModels
 
                     if (checkerDest != null && !token.IsCancellationRequested)
                     {
-                        var result = await _backupService.CopyFolderAsync(model.SourcePath, checkerDest, options, progress, token);
+                        var result = await _backupService.CopyFolderAsync(model.LiveModelPath, checkerDest, options, progress, token);
                         model.LastCheckerBackup = DateTime.UtcNow;
                         totalCopiedAcrossModels += result.CopiedFiles;
                         BackupService.AppendRecord(
@@ -582,7 +589,23 @@ namespace ModelCopier.ViewModels
                 if (SetField(ref _isIncrementalSyncRunning, value))
                 {
                     OnPropertyChanged(nameof(IsIncrementalSyncStopped));
+                    OnPropertyChanged(nameof(IsIncrementalSyncEnabled));
                     OnPropertyChanged(nameof(NextIncrementalSyncText));
+                }
+            }
+        }
+
+        /// <summary>Two-way bindable property for checkbox/tick mark control.</summary>
+        public bool IsIncrementalSyncEnabled
+        {
+            get => _isIncrementalSyncRunning;
+            set
+            {
+                if (value != _isIncrementalSyncRunning)
+                {
+                    if (value) ExecuteStartIncrementalSync();
+                    else ExecuteStopIncrementalSync();
+                    OnPropertyChanged(nameof(IsIncrementalSyncEnabled));
                 }
             }
         }
@@ -754,7 +777,7 @@ namespace ModelCopier.ViewModels
                         continue;
                     }
 
-                    if (!Directory.Exists(model.SourcePath))
+                    if (!Directory.Exists(model.LiveModelPath))
                     {
                         continue;
                     }
@@ -771,7 +794,7 @@ namespace ModelCopier.ViewModels
 
                     using var cts = new CancellationTokenSource();
                     var result = await _backupService.CopyFolderIncrementalAsync(
-                        model.SourcePath, destination, options, progress, cts.Token);
+                        model.LiveModelPath, destination, options, progress, cts.Token);
 
                     model.LastIncrementalBackup = DateTime.UtcNow;
                     totalCopiedAcrossModels += result.CopiedFiles;
@@ -1069,9 +1092,18 @@ namespace ModelCopier.ViewModels
 
         private void ExecuteLaunchInTekla()
         {
-            if (SelectedModel == null || !Directory.Exists(SelectedModel.SourcePath)) return;
+            if (SelectedModel == null) return;
+            if (!Directory.Exists(SelectedModel.LiveModelPath))
+            {
+                MessageBox.Show(
+                    $"Cannot launch in Tekla: Model folder '{SelectedModel.Name}' does not exist inside source path:\n\n{SelectedModel.SourcePath}\n\nExpected full path:\n{SelectedModel.LiveModelPath}",
+                    "Model Folder Not Found",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
 
-            bool launched = BackupService.LaunchInTekla(SelectedModel.SourcePath, _config.TeklaStructuresExePath);
+            bool launched = BackupService.LaunchInTekla(SelectedModel.LiveModelPath, _config.TeklaStructuresExePath);
             if (!launched)
             {
                 var prompt = MessageBox.Show(
@@ -1092,7 +1124,7 @@ namespace ModelCopier.ViewModels
                     {
                         _config.TeklaStructuresExePath = dlg.FileName;
                         _configService.Save(_config);
-                        BackupService.LaunchInTekla(SelectedModel.SourcePath, _config.TeklaStructuresExePath);
+                        BackupService.LaunchInTekla(SelectedModel.LiveModelPath, _config.TeklaStructuresExePath);
                         ShowToast("Tekla Configured", $"Saved Tekla executable path:\n{dlg.FileName}");
                     }
                 }
@@ -1181,16 +1213,16 @@ namespace ModelCopier.ViewModels
             if (SelectedModel == null) return;
 
             // Guard: model source exists
-            if (!Directory.Exists(SelectedModel.SourcePath))
+            if (!Directory.Exists(SelectedModel.LiveModelPath))
             {
                 if (!isAutomated)
                 {
                     MessageBox.Show(
-                        $"Source model folder does not exist:\n\n{SelectedModel.SourcePath}\n\nPlease check path!",
+                        $"Model folder '{SelectedModel.Name}' was not found in source path:\n\n{SelectedModel.SourcePath}\n\nExpected full path:\n{SelectedModel.LiveModelPath}\n\nThe application will only copy the model folder if it exists. Backup aborted.",
                         "Model Folder Not Found",
                         MessageBoxButton.OK, MessageBoxImage.Error);
                 }
-                StatusMessage = "Backup aborted: Source folder does not exist.";
+                StatusMessage = $"Backup aborted: Model folder '{SelectedModel.Name}' does not exist in '{SelectedModel.SourcePath}'.";
                 return;
             }
 
@@ -1252,7 +1284,7 @@ namespace ModelCopier.ViewModels
             };
 
             // ── Target Drive Free Space Pre-Check ────────────────────────
-            long sourceSize = await Task.Run(() => BackupService.GetDirectorySize(model.SourcePath, options));
+            long sourceSize = await Task.Run(() => BackupService.GetDirectorySize(model.LiveModelPath, options));
 
             if (reserveDest != null)
             {
@@ -1360,7 +1392,7 @@ namespace ModelCopier.ViewModels
                 {
                     StatusMessage = $"Creating Reserve backup for '{model.Name}'…";
                     ProgressPercentage = 0;
-                    var result = await _backupService.CopyFolderAsync(model.SourcePath, reserveDest, options, progress, token);
+                    var result = await _backupService.CopyFolderAsync(model.LiveModelPath, reserveDest, options, progress, token);
                     model.LastReserveBackup = DateTime.UtcNow;
 
                     totalCopied  += result.CopiedFiles;
@@ -1376,7 +1408,7 @@ namespace ModelCopier.ViewModels
                 {
                     StatusMessage = $"Creating Checker backup for '{model.Name}'…";
                     ProgressPercentage = 0;
-                    var result = await _backupService.CopyFolderAsync(model.SourcePath, checkerDest, options, progress, token);
+                    var result = await _backupService.CopyFolderAsync(model.LiveModelPath, checkerDest, options, progress, token);
                     model.LastCheckerBackup = DateTime.UtcNow;
 
                     totalCopied  += result.CopiedFiles;

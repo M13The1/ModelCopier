@@ -208,8 +208,8 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Quick Presets / Filters Row (Matching screenshot's Quick Presets) -->
-                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <!-- Quick Presets Row -->
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
                         <TextBlock Text="✨ " FontSize="12" Foreground="#FBBF24"/>
                         <TextBlock Text="Quick Presets:"
@@ -229,37 +229,118 @@
 
                     <Button Content="Checker Only (Type 2)"
                             Command="{Binding SelectCheckerOnlyCommand}"
-                            Style="{StaticResource PillPresetButtonStyle}"
-                            Margin="0,0,12,0"/>
-
-                    <!-- Auto-Backup Countdown Pill -->
-                    <Border Background="#091B33"
-                            BorderBrush="{StaticResource CardBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="14"
-                            Padding="10,4"
-                            Margin="0,0,8,0"
-                            VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⏱ " FontSize="11" Foreground="{StaticResource AccentCyanBrush}"/>
-                            <TextBlock Text="{Binding NextAutoBackupText}"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{StaticResource PrimaryLightBrush}"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Incremental Sync Status Pill -->
-                    <Button Command="{Binding ToggleIncrementalSyncCommand}"
-                            Style="{StaticResource PillPresetButtonStyle}"
-                            ToolTip="Toggle live session incremental backup for this model">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⚡ " FontSize="11" Foreground="{StaticResource AccentTealBrush}"/>
-                            <TextBlock Text="{Binding NextIncrementalSyncText}"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{StaticResource AccentTealBrush}"/>
-                        </StackPanel>
-                    </Button>
+                            Style="{StaticResource PillPresetButtonStyle}"/>
                 </StackPanel>
+
+                <!-- ── COMMON AUTOMATION SERVICES BAR (STACKED) ── -->
+                <Border Background="{StaticResource SurfaceDarkBrush}"
+                        BorderBrush="{StaticResource CardBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="14,9"
+                        Margin="0,10,0,0">
+                    <StackPanel>
+                        <!-- Row 1: Auto-Scheduled Backup -->
+                        <DockPanel LastChildFill="False">
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="⏱" FontSize="13" Foreground="{StaticResource AccentCyanBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <CheckBox Content="Enable Auto-Scheduled Backup"
+                                          IsChecked="{Binding IsAutoBackupEnabled, Mode=TwoWay}"
+                                          FontSize="11" FontWeight="SemiBold"
+                                          Foreground="{StaticResource PrimaryLightBrush}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,16,0"
+                                          ToolTip="Automatically triggers full backup at set intervals for all models with [Auto] ticked in registry"/>
+
+                                <TextBlock Text="Interval:" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox ItemsSource="{Binding AvailableIntervals}"
+                                          SelectedItem="{Binding AutoBackupIntervalMinutes, Mode=TwoWay}"
+                                          ItemStringFormat="{}{0} min"
+                                          Width="82" Height="26"
+                                          FontSize="11"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,12,0"/>
+
+                                <Border Background="#091B33"
+                                        BorderBrush="{StaticResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="12"
+                                        Padding="8,3"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,14,0">
+                                    <TextBlock Text="{Binding NextAutoBackupText}"
+                                               FontSize="10" FontWeight="Bold"
+                                               Foreground="{StaticResource AccentCyanBrush}"/>
+                                </Border>
+
+                                <CheckBox Content="Sound chime on finish"
+                                          IsChecked="{Binding PlaySoundOnCompletion, Mode=TwoWay}"
+                                          FontSize="10"
+                                          Foreground="{StaticResource SecondaryTextBrush}"
+                                          VerticalAlignment="Center"
+                                          ToolTip="Sound notification chime when scheduled backup completes"/>
+                            </StackPanel>
+
+                            <TextBlock DockPanel.Dock="Right"
+                                       Text="Only models with [Auto] ticked in registry will be executed"
+                                       FontSize="10"
+                                       Foreground="{StaticResource MutedTextBrush}"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
+
+                        <!-- Subtle Row Divider -->
+                        <Separator Margin="0,7" Background="{StaticResource BorderColorBrush}" Opacity="0.5"/>
+
+                        <!-- Row 2: Live Incremental Backup -->
+                        <DockPanel LastChildFill="False">
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="⚡" FontSize="13" Foreground="{StaticResource AccentTealBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <CheckBox Content="Enable Live Incremental Backup"
+                                          IsChecked="{Binding IsIncrementalSyncEnabled, Mode=TwoWay}"
+                                          FontSize="11" FontWeight="SemiBold"
+                                          Foreground="{StaticResource PrimaryLightBrush}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,16,0"
+                                          ToolTip="Automatically synchronizes modified files at set intervals during this session for models with [Incr] ticked in registry"/>
+
+                                <TextBlock Text="Interval:" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox ItemsSource="{Binding AvailableIncrementalIntervals}"
+                                          SelectedItem="{Binding IncrementalIntervalMinutes, Mode=TwoWay}"
+                                          ItemStringFormat="{}{0} min"
+                                          Width="82" Height="26"
+                                          FontSize="11"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,12,0"/>
+
+                                <Border Background="#091F38"
+                                        BorderBrush="{StaticResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="12"
+                                        Padding="8,3"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,12,0">
+                                    <TextBlock Text="{Binding NextIncrementalSyncText}"
+                                               FontSize="10" FontWeight="Bold"
+                                               Foreground="{StaticResource AccentTealBrush}"/>
+                                </Border>
+
+                                <Button Content="⚡ Sync Now"
+                                        Command="{Binding SyncIncrementalNowCommand}"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Padding="10,4"
+                                        FontSize="10"
+                                        ToolTip="Immediately synchronize modified files for all [Incr] models"
+                                        Margin="0,0,10,0"/>
+                            </StackPanel>
+
+                            <TextBlock DockPanel.Dock="Right"
+                                       Text="Only models with [Incr] ticked in registry will be executed"
+                                       FontSize="10"
+                                       Foreground="{StaticResource MutedTextBrush}"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </Border>
 
@@ -444,7 +525,7 @@
                                         <Setter Property="Padding"         Value="12,9"/>
                                         <Setter Property="Foreground"      Value="{StaticResource SecondaryTextBrush}"/>
                                         <Setter Property="TextTrimming"    Value="CharacterEllipsis"/>
-                                        <Setter Property="ToolTip"         Value="{Binding SourcePath}"/>
+                                        <Setter Property="ToolTip"         Value="{Binding LiveModelPath}"/>
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
@@ -543,26 +624,41 @@
                                                Converter={StaticResource NullToVisibility}}">
                         <StackPanel>
 
-                            <!-- Header: Model Name & Status Pill -->
+                            <!-- Header: Model Name & Actions -->
                             <DockPanel LastChildFill="False" Margin="0,0,0,14">
                                 <TextBlock DockPanel.Dock="Left"
                                            Text="{Binding SelectedModel.Name}"
                                            FontSize="17" FontWeight="Bold"
                                            Foreground="{StaticResource PrimaryTextBrush}"
                                            TextWrapping="Wrap"
-                                           MaxWidth="290"/>
+                                           MaxWidth="240"/>
 
-                                <Border DockPanel.Dock="Right"
-                                        Background="#0A223E"
-                                        BorderBrush="{StaticResource AccentCyanBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="10"
-                                        Padding="10,4"
-                                        VerticalAlignment="Center">
-                                    <TextBlock Text="READY"
-                                               FontSize="10" FontWeight="Bold"
-                                               Foreground="{StaticResource AccentCyanBrush}"/>
-                                </Border>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="▶ Tekla"
+                                            Command="{Binding LaunchSelectedModelInTeklaCommand}"
+                                            Style="{StaticResource PrimaryButtonStyle}"
+                                            Padding="10,4"
+                                            FontSize="10"
+                                            Margin="0,0,6,0"
+                                            ToolTip="Directly launch this model inside Tekla Structures"/>
+                                    <Button Content="📁 Open"
+                                            Command="{Binding OpenSourceFolderCommand}"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Padding="8,4"
+                                            FontSize="10"
+                                            Margin="0,0,8,0"
+                                            ToolTip="Open model folder in Windows Explorer"/>
+                                    <Border Background="#0A223E"
+                                            BorderBrush="{StaticResource AccentCyanBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="10,4"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="READY"
+                                                   FontSize="10" FontWeight="Bold"
+                                                   Foreground="{StaticResource AccentCyanBrush}"/>
+                                    </Border>
+                                </StackPanel>
                             </DockPanel>
 
                             <!-- ── SECTION 1: CALCULATION / REPLICATION MODE ── -->
@@ -665,412 +761,11 @@
                                              Padding="8,6"
                                              FontSize="11"
                                              Margin="0,0,0,3"/>
-                                    <TextBlock Text="Suffix is always appended to the model folder after HHmm to avoid clash when live &amp; backup models are open."
+                                    <TextBlock Text="Suffix is auto-prefixed with '_' and appended after HHmm to avoid clash when live &amp; backup models are open."
                                                FontSize="9"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Margin="0,0,0,8"/>
-
-                                    <!-- Live Destination Path Preview -->
-                                    <TextBlock Text="DESTINATION FOLDER PREVIEW"
-                                               FontSize="9" FontWeight="Bold"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Margin="0,0,0,3"/>
-                                    <Border Background="#050B16"
-                                            BorderBrush="#15243E"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="8,5"
-                                            Margin="0,0,0,10">
-                                        <TextBlock Text="{Binding DestinationPreview}"
-                                                   FontSize="10"
-                                                   FontFamily="Consolas"
-                                                   Foreground="{StaticResource AccentCyanBrush}"
-                                                   TextWrapping="Wrap"
-                                                   ToolTip="{Binding DestinationPreview}"/>
-                                    </Border>
-
-                                    <!-- Automated Scheduled Backup Controls -->
-                                    <Separator Margin="0,2,0,8"/>
-                                    <DockPanel LastChildFill="False" Margin="0,0,0,6">
-                                        <CheckBox DockPanel.Dock="Left"
-                                                  Content="Enable Auto-Scheduled Backup"
-                                                  IsChecked="{Binding IsAutoBackupEnabled, Mode=TwoWay}"
-                                                  FontSize="10" FontWeight="SemiBold"
-                                                  Foreground="{StaticResource PrimaryLightBrush}"/>
-                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="Interval:" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                            <ComboBox ItemsSource="{Binding AvailableIntervals}"
-                                                      SelectedItem="{Binding AutoBackupIntervalMinutes, Mode=TwoWay}"
-                                                      ItemStringFormat="{}{0} min"
-                                                      Width="80" Height="24"
-                                                      FontSize="10"
-                                                      VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </DockPanel>
-
-                                    <!-- Per-model auto-backup selection -->
-                                    <CheckBox Content="Include selected model in Scheduled Auto-Backup"
-                                              IsChecked="{Binding SelectedModel.EnableAutoBackup, Mode=TwoWay}"
-                                              FontSize="10" FontWeight="SemiBold"
-                                              Foreground="{StaticResource PrimaryLightBrush}"
-                                              Margin="0,0,0,6"
-                                              ToolTip="When checked, scheduled interval full backups will include this model."/>
-
-                                    <DockPanel LastChildFill="False">
-                                        <TextBlock DockPanel.Dock="Left"
-                                                   Text="{Binding NextAutoBackupText}"
-                                                   FontSize="9" FontWeight="Bold"
-                                                   Foreground="{StaticResource AccentCyanBrush}"
-                                                   VerticalAlignment="Center"/>
-                                        <CheckBox DockPanel.Dock="Right"
-                                                  Content="Sound chime on finish"
-                                                  IsChecked="{Binding PlaySoundOnCompletion, Mode=TwoWay}"
-                                                  FontSize="10"
-                                                  Foreground="{StaticResource SecondaryTextBrush}"/>
-                                    </DockPanel>
+                                               Foreground="{StaticResource MutedTextBrush}"/>
                                 </StackPanel>
                             </Border>
-
-                            <!-- ── SECTION 1C: LIVE INCREMENTAL SYNC (MODIFIED FILES ONLY) ── -->
-                            <Border Background="{StaticResource SurfaceDarkBrush}"
-                                    BorderBrush="{StaticResource AccentCyanBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12,10"
-                                    Margin="0,0,0,14">
-                                <StackPanel>
-                                    <!-- Header & Status Pill -->
-                                    <DockPanel LastChildFill="False" Margin="0,0,0,6">
-                                        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="⚡ " FontSize="12" Foreground="{StaticResource AccentTealBrush}"/>
-                                            <TextBlock Text="LIVE INCREMENTAL BACKUP"
-                                                       FontSize="10" FontWeight="Bold"
-                                                       Foreground="{StaticResource PrimaryLightBrush}"/>
-                                        </StackPanel>
-
-                                        <Border DockPanel.Dock="Right"
-                                                Background="#091F38"
-                                                BorderBrush="{StaticResource AccentCyanBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="4"
-                                                Padding="6,2"
-                                                VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding NextIncrementalSyncText}"
-                                                       FontSize="9" FontWeight="Bold"
-                                                       Foreground="{StaticResource AccentCyanBrush}"/>
-                                        </Border>
-                                    </DockPanel>
-
-                                    <TextBlock Text="Copies only modified or new files to a separate persistent copy at set intervals. Runs only during this active application session when started."
-                                               FontSize="10"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               TextWrapping="Wrap"
-                                               Margin="0,0,0,8"/>
-
-                                    <!-- Per-model incremental sync selection -->
-                                    <CheckBox Content="Include selected model in Live Incremental Sync"
-                                              IsChecked="{Binding SelectedModel.EnableIncrementalBackup, Mode=TwoWay}"
-                                              FontSize="10" FontWeight="SemiBold"
-                                              Foreground="{StaticResource PrimaryLightBrush}"
-                                              Margin="0,0,0,8"
-                                              ToolTip="When checked, live session incremental sync will copy modified files for this model."/>
-
-                                    <!-- Action Row: Start/Stop Button, Interval, and Sync Now -->
-                                    <Grid Margin="0,0,0,6">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- Start / Stop Toggle -->
-                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Button Content="▶ Start Live Sync"
-                                                    Command="{Binding StartIncrementalSyncCommand}"
-                                                    Style="{StaticResource PrimaryButtonStyle}"
-                                                    Padding="12,5"
-                                                    FontSize="11"
-                                                    Visibility="{Binding IsIncrementalSyncStopped, Converter={StaticResource BoolToVisibility}}"
-                                                    ToolTip="Start interval incremental backup for this session"/>
-
-                                            <Button Content="⏹ Stop Sync"
-                                                    Command="{Binding StopIncrementalSyncCommand}"
-                                                    Style="{StaticResource DangerButtonStyle}"
-                                                    Padding="12,5"
-                                                    FontSize="11"
-                                                    Visibility="{Binding IsIncrementalSyncRunning, Converter={StaticResource BoolToVisibility}}"
-                                                    ToolTip="Stop interval incremental backup"/>
-                                        </StackPanel>
-
-                                        <!-- Interval Selector in middle -->
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <TextBlock Text="Interval:" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                            <ComboBox ItemsSource="{Binding AvailableIncrementalIntervals}"
-                                                      SelectedItem="{Binding IncrementalIntervalMinutes, Mode=TwoWay}"
-                                                      ItemStringFormat="{}{0} min"
-                                                      Width="75" Height="24"
-                                                      FontSize="10"
-                                                      VerticalAlignment="Center"/>
-                                        </StackPanel>
-
-                                        <!-- Manual Trigger Now -->
-                                        <Button Grid.Column="2"
-                                                Content="⚡ Sync Now"
-                                                Command="{Binding SyncIncrementalNowCommand}"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Padding="10,5"
-                                                FontSize="11"
-                                                ToolTip="Trigger incremental sync of modified files immediately"/>
-                                    </Grid>
-
-                                    <!-- Status footer -->
-                                    <DockPanel LastChildFill="False" Margin="0,4,0,0">
-                                        <TextBlock DockPanel.Dock="Left"
-                                                   Text="{Binding IncrementalStatusText}"
-                                                   FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource PrimaryTextBrush}"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock DockPanel.Dock="Right"
-                                                   Text="{Binding IncrementalDestinationPreview, StringFormat='Target: {0}'}"
-                                                   FontSize="9" FontFamily="Consolas"
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   MaxWidth="220"
-                                                   ToolTip="{Binding IncrementalDestinationPreview}"/>
-                                    </DockPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- ── SECTION 2: INPUT SPECIFICATIONS (DIRECTORIES) ── -->
-                            <TextBlock Text="📋  Target Specifications &amp; Directory Paths"
-                                       FontSize="11" FontWeight="Bold"
-                                       Foreground="{StaticResource PrimaryLightBrush}"
-                                       Margin="0,2,0,10"/>
-
-                            <!-- Source Folder -->
-                            <TextBlock Text="SOURCE DIRECTORY — TEKLA MODEL"
-                                       Style="{StaticResource FieldLabelStyle}"/>
-                            <Border Background="{StaticResource SurfaceDarkBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Padding="10,8"
-                                    Margin="0,0,0,3">
-                                <DockPanel LastChildFill="True">
-                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Button Content="▶ Tekla"
-                                                Command="{Binding LaunchSelectedModelInTeklaCommand}"
-                                                Style="{StaticResource PrimaryButtonStyle}"
-                                                Padding="10,4"
-                                                Margin="6,0,0,0"
-                                                ToolTip="Directly launch this model inside Tekla Structures"/>
-                                        <Button Content="📁 Open"
-                                                Command="{Binding OpenSourceFolderCommand}"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Padding="8,4"
-                                                Margin="6,0,0,0"
-                                                ToolTip="Open model folder in Windows Explorer"/>
-                                    </StackPanel>
-                                    <TextBlock Text="{Binding SelectedModel.SourcePath, TargetNullValue='(not configured)'}"
-                                               FontSize="11"
-                                               Foreground="{StaticResource PrimaryLightBrush}"
-                                               TextTrimming="CharacterEllipsis"
-                                               ToolTip="{Binding SelectedModel.SourcePath}"
-                                               VerticalAlignment="Center"/>
-                                </DockPanel>
-                            </Border>
-                            <DockPanel LastChildFill="False" Margin="2,0,0,10">
-                                <TextBlock DockPanel.Dock="Left"
-                                           Text="Interpreted: Local model repository • Direct access verified"
-                                           FontSize="10"
-                                           Foreground="{StaticResource MutedTextBrush}"/>
-                                <TextBlock DockPanel.Dock="Right"
-                                           Text="{Binding SourceModelSizeText, StringFormat='Model Size: {0}'}"
-                                           FontSize="10" FontWeight="SemiBold"
-                                           Foreground="{StaticResource AccentCyanBrush}"
-                                           ToolTip="Calculated size of source model files"/>
-                            </DockPanel>
-
-                            <!-- Reserve Target -->
-                            <TextBlock Text="RESERVE TARGET DIRECTORY (TYPE 1)"
-                                       Style="{StaticResource FieldLabelStyle}"/>
-                            <Border Background="{StaticResource SurfaceDarkBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Padding="10,8"
-                                    Margin="0,0,0,3">
-                                <DockPanel LastChildFill="True">
-                                    <Border DockPanel.Dock="Right"
-                                            Background="#091A30"
-                                            BorderBrush="{StaticResource CardBorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="6,2"
-                                            Margin="8,0,0,0"
-                                            VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding ReserveTargetFreeSpaceText}"
-                                                   FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource SuccessBrush}"
-                                                   ToolTip="Available drive free space on target volume"/>
-                                    </Border>
-                                    <TextBlock Text="{Binding SelectedModel.ReserveTargetPath, TargetNullValue='(not configured)'}"
-                                               FontSize="11"
-                                               Foreground="{StaticResource PrimaryLightBrush}"
-                                               TextTrimming="CharacterEllipsis"
-                                               ToolTip="{Binding SelectedModel.ReserveTargetPath}"
-                                               VerticalAlignment="Center"/>
-                                </DockPanel>
-                            </Border>
-                            <TextBlock Text="Interpreted: Primary safety mirror destination"
-                                       FontSize="10"
-                                       Foreground="{StaticResource MutedTextBrush}"
-                                       Margin="2,0,0,10"/>
-
-                            <!-- Checker Target -->
-                            <TextBlock Text="CHECKER TARGET DIRECTORY (TYPE 2)"
-                                       Style="{StaticResource FieldLabelStyle}"/>
-                            <Border Background="{StaticResource SurfaceDarkBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Padding="10,8"
-                                    Margin="0,0,0,3">
-                                <DockPanel LastChildFill="True">
-                                    <Border DockPanel.Dock="Right"
-                                            Background="#091A30"
-                                            BorderBrush="{StaticResource CardBorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="6,2"
-                                            Margin="8,0,0,0"
-                                            VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding CheckerTargetFreeSpaceText}"
-                                                   FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource SuccessBrush}"
-                                                   ToolTip="Available drive free space on target volume"/>
-                                    </Border>
-                                    <TextBlock Text="{Binding SelectedModel.CheckerTargetPath, TargetNullValue='(not configured)'}"
-                                               FontSize="11"
-                                               Foreground="{StaticResource PrimaryLightBrush}"
-                                               TextTrimming="CharacterEllipsis"
-                                               ToolTip="{Binding SelectedModel.CheckerTargetPath}"
-                                               VerticalAlignment="Center"/>
-                                </DockPanel>
-                            </Border>
-                            <TextBlock Text="Interpreted: Secondary verification replica destination"
-                                       FontSize="10"
-                                       Foreground="{StaticResource MutedTextBrush}"
-                                       Margin="2,0,0,10"/>
-
-                            <!-- Incremental Target -->
-                            <TextBlock Text="INCREMENTAL TARGET DIRECTORY (LIVE SYNC)"
-                                       Style="{StaticResource FieldLabelStyle}"/>
-                            <Border Background="{StaticResource SurfaceDarkBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Padding="10,8"
-                                    Margin="0,0,0,3">
-                                <DockPanel LastChildFill="True">
-                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Border Background="#091A30"
-                                                BorderBrush="{StaticResource CardBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="4"
-                                                Padding="6,2"
-                                                Margin="0,0,6,0"
-                                                VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding IncrementalTargetFreeSpaceText}"
-                                                       FontSize="10" FontWeight="SemiBold"
-                                                       Foreground="{StaticResource SuccessBrush}"
-                                                       ToolTip="Available drive free space on target volume"/>
-                                        </Border>
-                                        <Button Content="📁 Open"
-                                                Command="{Binding OpenIncrementalFolderCommand}"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Padding="8,3"
-                                                VerticalAlignment="Center"
-                                                ToolTip="Open incremental target folder in Windows Explorer"/>
-                                    </StackPanel>
-                                    <TextBlock Text="{Binding SelectedModel.IncrementalTargetPath, TargetNullValue='(not configured - click Edit to configure)'}"
-                                               FontSize="11"
-                                               Foreground="{StaticResource PrimaryLightBrush}"
-                                               TextTrimming="CharacterEllipsis"
-                                               ToolTip="{Binding SelectedModel.IncrementalTargetPath}"
-                                               VerticalAlignment="Center"/>
-                                </DockPanel>
-                            </Border>
-                            <TextBlock Text="Interpreted: Separate continuous mirror for modified files only"
-                                       FontSize="10"
-                                       Foreground="{StaticResource MutedTextBrush}"
-                                       Margin="2,0,0,12"/>
-
-                            <!-- ── SECTION 3: SYNC METRICS (Side-by-side 3 tiles) ── -->
-                            <Grid Margin="0,0,0,14">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="6"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="6"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Tile 1: Last Reserve -->
-                                <Border Grid.Column="0"
-                                        Background="{StaticResource SurfaceDarkBrush}"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="6"
-                                        Padding="8,8">
-                                    <StackPanel>
-                                        <TextBlock Text="LAST RESERVE"
-                                                   FontSize="9" FontWeight="Bold"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"/>
-                                        <TextBlock Text="{Binding SelectedModel.LastReserveBackupDisplay}"
-                                                   FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource AccentCyanBrush}"
-                                                   Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Tile 2: Last Checker -->
-                                <Border Grid.Column="2"
-                                        Background="{StaticResource SurfaceDarkBrush}"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="6"
-                                        Padding="8,8">
-                                    <StackPanel>
-                                        <TextBlock Text="LAST CHECKER"
-                                                   FontSize="9" FontWeight="Bold"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"/>
-                                        <TextBlock Text="{Binding SelectedModel.LastCheckerBackupDisplay}"
-                                                   FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource AccentCyanBrush}"
-                                                   Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Tile 3: Last Incremental Sync -->
-                                <Border Grid.Column="4"
-                                        Background="{StaticResource SurfaceDarkBrush}"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="6"
-                                        Padding="8,8">
-                                    <StackPanel>
-                                        <TextBlock Text="LAST INCREMENTAL"
-                                                   FontSize="9" FontWeight="Bold"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"/>
-                                        <TextBlock Text="{Binding SelectedModel.LastIncrementalBackupDisplay}"
-                                                   FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource AccentTealBrush}"
-                                                   Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
 
                             <!-- Inquire Backups Button -->
                             <Button Content="🔍  Inquire Today's Backups &amp; Check Integrity"

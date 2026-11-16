@@ -77,18 +77,23 @@
 
                 <!-- Source Folder -->
                 <StackPanel Grid.Row="2" Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="Source Folder" Style="{StaticResource FieldLabelStyle}" Margin="0"/>
-                    <TextBlock Text="(required)"    FontSize="9" Foreground="{StaticResource MutedTextBrush}"/>
+                    <TextBlock Text="Source Repository" Style="{StaticResource FieldLabelStyle}" Margin="0"/>
+                    <TextBlock Text="(parent root)"    FontSize="9" Foreground="{StaticResource MutedTextBrush}"/>
                 </StackPanel>
-                <TextBox Grid.Row="2" Grid.Column="1"
-                         Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="Full path of the Tekla model folder to copy from"
-                         Margin="0,0,8,0"/>
+                <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,8,0">
+                    <TextBox Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Parent repository where the model folder resides (e.g. D:\LiveModels). The application only copies the model subfolder."/>
+                    <TextBlock Text="{Binding LiveModelPathPreview, StringFormat='Model Folder: {0}'}"
+                               FontSize="10" Foreground="{StaticResource AccentCyanBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="2,3,0,0"/>
+                </StackPanel>
                 <Button Grid.Row="2" Grid.Column="2" Content="Browse…"
                         Command="{Binding BrowseSourceCommand}"
                         Style="{StaticResource SecondaryButtonStyle}"
                         Padding="14,6"
-                        VerticalAlignment="Stretch"/>
+                        VerticalAlignment="Top"
+                        Height="32"/>
 
                 <!-- Reserve Target -->
                 <StackPanel Grid.Row="4" Grid.Column="0" VerticalAlignment="Center">

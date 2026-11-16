@@ -132,12 +132,17 @@ namespace ModelCopier.Services
             return Path.Combine(modelRoot, monthStamp, dayStamp, timeFolder, innerModelFolder);
         }
 
-        /// <summary>Cleans and sanitizes the user-provided suffix string.</summary>
+        /// <summary>Cleans, sanitizes, and ensures user-provided suffix starts with '_' if not empty.</summary>
         public static string CleanSuffix(string? suffix)
         {
             if (string.IsNullOrWhiteSpace(suffix)) return string.Empty;
             var invalidChars = Path.GetInvalidFileNameChars();
             var filtered = new string(suffix.Where(c => !invalidChars.Contains(c)).ToArray()).Trim();
+            if (string.IsNullOrWhiteSpace(filtered)) return string.Empty;
+            if (!filtered.StartsWith("_"))
+            {
+                filtered = "_" + filtered;
+            }
             return filtered;
         }
 
@@ -406,10 +411,13 @@ namespace ModelCopier.Services
         }
 
         /// <summary>
-        /// Renames Tekla model database files (*.db1, *.db1.bak, *.db2, *.db2.bak) in the root
+        /// Renames Tekla model database files ((ModelFolderName).db1, (ModelFolderName).db1.bak, 
+        /// (ModelFolderName).db2, (ModelFolderName).db2.bak) in the model root
         /// to match the target model folder name, avoiding Tekla model name clash.
+        /// Files whose name is not the model folder name (such as xslib.db1, xslib.db1.bak, xslib.db2, xslib.db2.bak)
+        /// are NOT renamed.
         /// </summary>
-        private static string MapDestinationRelativePath(string relativePath, string sourceModelName, string targetModelName)
+        public static string MapDestinationRelativePath(string relativePath, string sourceModelName, string targetModelName)
         {
             if (string.Equals(sourceModelName, targetModelName, StringComparison.OrdinalIgnoreCase))
                 return relativePath;
@@ -417,26 +425,23 @@ namespace ModelCopier.Services
             string fileName = Path.GetFileName(relativePath);
             string? dirName = Path.GetDirectoryName(relativePath);
 
-            // Renaming applies to root files of the model
+            // Renaming strictly applies only to root database files matching (ModelFolderName).db1, .db1.bak, .db2, .db2.bak
             if (string.IsNullOrEmpty(dirName))
             {
-                if (fileName.EndsWith(".db1", StringComparison.OrdinalIgnoreCase))
-                    return $"{targetModelName}.db1";
+                string cleanSource = sourceModelName.Trim();
+                string cleanTarget = targetModelName.Trim();
 
-                if (fileName.EndsWith(".db1.bak", StringComparison.OrdinalIgnoreCase))
-                    return $"{targetModelName}.db1.bak";
+                if (string.Equals(fileName, $"{cleanSource}.db1", StringComparison.OrdinalIgnoreCase))
+                    return $"{cleanTarget}.db1";
 
-                if (fileName.EndsWith(".db2", StringComparison.OrdinalIgnoreCase))
-                    return $"{targetModelName}.db2";
+                if (string.Equals(fileName, $"{cleanSource}.db1.bak", StringComparison.OrdinalIgnoreCase))
+                    return $"{cleanTarget}.db1.bak";
 
-                if (fileName.EndsWith(".db2.bak", StringComparison.OrdinalIgnoreCase))
-                    return $"{targetModelName}.db2.bak";
+                if (string.Equals(fileName, $"{cleanSource}.db2", StringComparison.OrdinalIgnoreCase))
+                    return $"{cleanTarget}.db2";
 
-                if (fileName.StartsWith(sourceModelName + ".", StringComparison.OrdinalIgnoreCase))
-                {
-                    string ext = fileName.Substring(sourceModelName.Length);
-                    return $"{targetModelName}{ext}";
-                }
+                if (string.Equals(fileName, $"{cleanSource}.db2.bak", StringComparison.OrdinalIgnoreCase))
+                    return $"{cleanTarget}.db2.bak";
             }
 
             return relativePath;

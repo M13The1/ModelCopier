@@ -36,15 +36,24 @@ namespace ModelCopier
 
             if (DataContext is MainViewModel vm && sender is TextBox tb)
             {
-                // If the user deleted the suffix from the text box
-                if (_hadTextWhileEditing && string.IsNullOrWhiteSpace(tb.Text))
+                if (!string.IsNullOrWhiteSpace(tb.Text))
                 {
+                    string text = tb.Text.Trim();
+                    if (!text.StartsWith("_"))
+                    {
+                        tb.Text = "_" + text;
+                        vm.TargetFolderSuffix = tb.Text;
+                    }
+                }
+                else if (_hadTextWhileEditing)
+                {
+                    // If the user deleted the suffix from the text box
                     _suppressWarning = true;
                     try
                     {
                         MessageBox.Show(
                             "Having a suffix is helpful in avoiding clash with live Tekla Structures model when both are opened.\n\n" +
-                            "It is strongly recommended to specify a suffix (e.g., QC, RevA, Backup) so the backup model can be identified and opened safely alongside the active model.",
+                            "It is strongly recommended to specify a suffix (e.g., _bak, _QC, _RevA) so the backup model can be identified and opened safely alongside the active model.",
                             "Suffix Recommended",
                             MessageBoxButton.OK,
                             MessageBoxImage.Warning);

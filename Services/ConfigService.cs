@@ -87,7 +87,12 @@ namespace ModelCopier.Services
             try
             {
                 string json = File.ReadAllText(ConfigPath);
-                return JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ?? new AppConfig();
+                var config = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ?? new AppConfig();
+                foreach (var model in config.Models)
+                {
+                    model.SourcePath = ModelEntry.NormalizeSourcePath(model.SourcePath, model.Name);
+                }
+                return config;
             }
             catch (Exception)
             {

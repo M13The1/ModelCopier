@@ -279,14 +279,18 @@ namespace ModelCopier.Services
         /// Incrementally copies only new or modified files from <paramref name="sourceDir"/> into <paramref name="targetDir"/>.
         /// Compares file size and write timestamps (with 1.0s tolerance).
         /// Preserves LastWriteTimeUtc on destination files for accurate future diffs.
-        /// Also renames *.db1, *.db2 database files in model root if target folder is suffixed.
+        /// In incremental backup, Tekla model database files ((modelname)*.db*) in the model root
+        /// have the suffix _yyyyMMdd_HHmm appended to their filename so that multiple point-in-time
+        /// database backups accumulate for the user to choose from.
+        /// Non-model database files (e.g. xslib.db1) and non-database files are mirrored in-place.
         /// </summary>
         public async Task<IncrementalBackupResult> CopyFolderIncrementalAsync(
             string sourceDir,
             string targetDir,
             BackupOptions options,
             IProgress<BackupProgress>? progress,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            DateTime? timestamp = null)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -295,6 +299,7 @@ namespace ModelCopier.Services
 
             string sourceModelName = Path.GetFileName(sourceDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
             string targetModelName = Path.GetFileName(targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            DateTime syncTimestamp = timestamp ?? DateTime.Now;
 
             var allFiles = CollectFiles(sourceDir);
             var validSourceFiles = new List<string>();
@@ -321,29 +326,53 @@ namespace ModelCopier.Services
             foreach (string srcFile in validSourceFiles)
             {
                 string relative = Path.GetRelativePath(sourceDir, srcFile);
-                string destRelative = MapDestinationRelativePath(relative, sourceModelName, targetModelName);
-                string destFile = Path.Combine(targetDir, destRelative);
-
-                if (!string.Equals(relative, destRelative, StringComparison.OrdinalIgnoreCase))
-                {
-                    renamedFiles.Add($"{relative} -> {destRelative}");
-                }
-
+                var srcInfo = new FileInfo(srcFile);
                 bool needsCopy = false;
-                if (!File.Exists(destFile))
+                string destRelative;
+                string destFile;
+
+                if (IsModelDatabaseFile(relative, sourceModelName, out string dbExt))
                 {
-                    needsCopy = true;
+                    // Model database file in root: append _yyyyMMdd_HHmm so multiple snapshots accumulate
+                    destRelative = MapIncrementalDestinationRelativePath(relative, sourceModelName, targetModelName, syncTimestamp);
+                    destFile = Path.Combine(targetDir, destRelative);
+
+                    string cleanTarget = targetModelName.Trim();
+                    bool alreadyBackedUp = HasMatchingDatabaseBackup(targetDir, cleanTarget, dbExt, srcInfo);
+
+                    if (alreadyBackedUp)
+                    {
+                        needsCopy = false;
+                    }
+                    else
+                    {
+                        needsCopy = true;
+                        renamedFiles.Add($"{relative} -> {destRelative}");
+                    }
                 }
                 else
                 {
-                    var srcInfo = new FileInfo(srcFile);
-                    var dstInfo = new FileInfo(destFile);
+                    // Regular file: continuous in-place mirror
+                    destRelative = MapDestinationRelativePath(relative, sourceModelName, targetModelName);
+                    destFile = Path.Combine(targetDir, destRelative);
 
-                    // Compare file size or modification time (with 1.0s tolerance for filesystem rounding)
-                    if (srcInfo.Length != dstInfo.Length ||
-                        Math.Abs((srcInfo.LastWriteTimeUtc - dstInfo.LastWriteTimeUtc).TotalSeconds) > 1.0)
+                    if (!string.Equals(relative, destRelative, StringComparison.OrdinalIgnoreCase))
+                    {
+                        renamedFiles.Add($"{relative} -> {destRelative}");
+                    }
+
+                    if (!File.Exists(destFile))
                     {
                         needsCopy = true;
+                    }
+                    else
+                    {
+                        var dstInfo = new FileInfo(destFile);
+                        if (srcInfo.Length != dstInfo.Length ||
+                            Math.Abs((srcInfo.LastWriteTimeUtc - dstInfo.LastWriteTimeUtc).TotalSeconds) > 1.0)
+                        {
+                            needsCopy = true;
+                        }
                     }
                 }
 
@@ -408,6 +437,128 @@ namespace ModelCopier.Services
                 Duration          = sw.Elapsed,
                 DestinationPath   = targetDir
             };
+        }
+
+        /// <summary>
+        /// Checks whether the relative path represents a Tekla model database file (*.db1, *.db1.bak, *.db2, *.db2.bak, etc.)
+        /// located directly in the root of the source model directory matching (modelname)*.db*.
+        /// Non-model files such as xslib.db1, xslib.db2, and database files inside subdirectories return false.
+        /// </summary>
+        public static bool IsModelDatabaseFile(string relativePath, string sourceModelName, out string dbExtension)
+        {
+            dbExtension = string.Empty;
+            if (string.IsNullOrWhiteSpace(relativePath) || string.IsNullOrWhiteSpace(sourceModelName))
+                return false;
+
+            // Database files to be renamed / timestamped MUST reside directly in the model root
+            string? dirName = Path.GetDirectoryName(relativePath);
+            if (!string.IsNullOrEmpty(dirName))
+                return false;
+
+            string fileName = Path.GetFileName(relativePath);
+            string cleanSource = sourceModelName.Trim();
+
+            // Strictly must start with the model folder name
+            if (!fileName.StartsWith(cleanSource, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string remainder = fileName.Substring(cleanSource.Length);
+
+            // Matches (modelname).db1, (modelname).db1.bak, (modelname).db2, (modelname).db2.bak, (modelname).db*
+            if (remainder.StartsWith(".db", StringComparison.OrdinalIgnoreCase))
+            {
+                dbExtension = remainder;
+                return true;
+            }
+
+            // Also matches (modelname)*.db* in root
+            int dbIdx = remainder.IndexOf(".db", StringComparison.OrdinalIgnoreCase);
+            if (dbIdx >= 0)
+            {
+                dbExtension = remainder.Substring(dbIdx);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Maps the relative destination path for incremental backups.
+        /// Model database files ((modelname)*.db* in root) receive a timestamp suffix (_yyyyMMdd_HHmm)
+        /// before their database extension, allowing multiple database backups to accumulate for the user to choose from.
+        /// Other files retain their standard relative path.
+        /// </summary>
+        public static string MapIncrementalDestinationRelativePath(
+            string relativePath,
+            string sourceModelName,
+            string targetModelName,
+            DateTime timestamp)
+        {
+            if (IsModelDatabaseFile(relativePath, sourceModelName, out string dbExtension))
+            {
+                string cleanTarget = targetModelName.Trim();
+                string timeSuffix = timestamp.ToString("yyyyMMdd_HHmm");
+                string sep = cleanTarget.EndsWith("_") ? "" : "_";
+                return $"{cleanTarget}{sep}{timeSuffix}{dbExtension}";
+            }
+
+            return MapDestinationRelativePath(relativePath, sourceModelName, targetModelName);
+        }
+
+        /// <summary>
+        /// Checks if an existing backup of a model database file (*.db*) already exists in the target directory
+        /// with identical file size and last write time (within 1.0s tolerance), avoiding redundant copies when unchanged.
+        /// </summary>
+        public static bool HasMatchingDatabaseBackup(
+            string targetDir,
+            string cleanTarget,
+            string dbExtension,
+            FileInfo srcInfo)
+        {
+            if (!Directory.Exists(targetDir))
+                return false;
+
+            try
+            {
+                var dirInfo = new DirectoryInfo(targetDir);
+                var candidates = dirInfo.EnumerateFiles($"{cleanTarget}*");
+                foreach (var file in candidates)
+                {
+                    string name = file.Name;
+                    if (!name.StartsWith(cleanTarget, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    string remainder = name.Substring(cleanTarget.Length);
+
+                    // Remainder must be either exactly dbExtension (e.g. ".db1") or "_<timestamp>" + dbExtension (e.g. "_20261117_1200.db1")
+                    if (!remainder.Equals(dbExtension, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!remainder.EndsWith(dbExtension, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        // Ensure .db1 does not match .db1.bak
+                        if (!dbExtension.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) &&
+                            remainder.EndsWith($"{dbExtension}.bak", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        string middle = remainder.Substring(0, remainder.Length - dbExtension.Length);
+                        if (!middle.StartsWith("_") && !middle.StartsWith("-"))
+                            continue;
+                    }
+
+                    if (file.Length == srcInfo.Length &&
+                        Math.Abs((srcInfo.LastWriteTimeUtc - file.LastWriteTimeUtc).TotalSeconds) <= 1.0)
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+                // If directory enumeration fails, return false to allow copying
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -796,6 +947,15 @@ namespace ModelCopier.Services
                 writer.WriteLine($"Files Updated: {result.CopiedFiles} (new or modified)");
                 writer.WriteLine($"Unchanged    : {result.UnchangedFiles}");
                 writer.WriteLine($"Files Skipped: {result.SkippedFiles} (*.bak, *.locked, *.tmp, etc.)");
+
+                if (result.RenamedFiles.Count > 0)
+                {
+                    writer.WriteLine($"Renamed database files ({result.RenamedFiles.Count}):");
+                    foreach (var r in result.RenamedFiles)
+                    {
+                        writer.WriteLine($"  * {r}");
+                    }
+                }
 
                 if (result.UpdatedFiles.Count > 0 && result.UpdatedFiles.Count <= 20)
                 {

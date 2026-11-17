@@ -792,9 +792,10 @@ namespace ModelCopier.ViewModels
                         IncrementalStatusText = $"[{model.Name}] Syncing {p.CopiedFiles}/{p.TotalFiles} modified files…";
                     });
 
+                    DateTime syncTimestamp = DateTime.Now;
                     using var cts = new CancellationTokenSource();
                     var result = await _backupService.CopyFolderIncrementalAsync(
-                        model.LiveModelPath, destination, options, progress, cts.Token);
+                        model.LiveModelPath, destination, options, progress, cts.Token, syncTimestamp);
 
                     model.LastIncrementalBackup = DateTime.UtcNow;
                     totalCopiedAcrossModels += result.CopiedFiles;

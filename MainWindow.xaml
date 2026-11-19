@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:ModelCopier.ViewModels"
         Title="{Binding WindowTitle}"
+        Icon="pack://application:,,,/Resources/app.ico"
         Width="1200" Height="780"
         MinWidth="940" MinHeight="580"
         WindowStartupLocation="CenterScreen"
@@ -37,22 +38,25 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Brand Logo (Glowing 3D Cube + BuildSmith) -->
+                <!-- Brand Logo (Neumorphic Isometric Cube Badge + BuildSmith) -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="34" Height="34"
-                            CornerRadius="8"
-                            Background="#091529"
-                            BorderBrush="{StaticResource AccentCyanBrush}"
+                    <Border Width="36" Height="36"
+                            CornerRadius="10"
+                            Background="{StaticResource NeumorphicSunkenBrush}"
+                            BorderBrush="{StaticResource NeumorphicButtonBorderBrush}"
                             BorderThickness="1.2"
                             Margin="0,0,12,0">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="8" ShadowDepth="2" Direction="315" Color="#020408" Opacity="0.7"/>
+                        </Border.Effect>
                         <!-- Stylized Geometric Cube Graphic -->
                         <Canvas Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <!-- Top Facet -->
-                            <Polygon Points="10,2 18,6 10,10 2,6" Fill="#00F0FF" Opacity="0.9"/>
+                            <Polygon Points="10,2 18,6 10,10 2,6" Fill="#00F0FF" Opacity="0.95"/>
                             <!-- Left Facet -->
-                            <Polygon Points="2,6 10,10 10,18 2,14" Fill="#00B4D8" Opacity="0.75"/>
+                            <Polygon Points="2,6 10,10 10,18 2,14" Fill="#00B4D8" Opacity="0.8"/>
                             <!-- Right Facet -->
-                            <Polygon Points="10,10 18,6 18,14 10,18" Fill="#1D4ED8" Opacity="0.85"/>
+                            <Polygon Points="10,10 18,6 18,14 10,18" Fill="#1D4ED8" Opacity="0.9"/>
                         </Canvas>
                     </Border>
 
@@ -66,12 +70,10 @@
                                    Margin="0,-1,0,0"/>
                     </StackPanel>
 
-                    <!-- Build Version Badge -->
-                    <Border Background="#0C1B33"
-                            BorderBrush="{StaticResource CardBorderBrush}"
-                            BorderThickness="1"
+                    <!-- Build Version Badge (Neumorphic Sunken Capsule) -->
+                    <Border Style="{StaticResource NeumorphicSunkenBorderStyle}"
                             CornerRadius="8"
-                            Padding="7,3"
+                            Padding="8,3"
                             Margin="10,0,0,0"
                             VerticalAlignment="Center">
                         <TextBlock Text="{Binding AppVersion}"
@@ -112,11 +114,9 @@
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <!-- Network Config Selector / Status -->
-                    <Border Background="#091830"
-                            BorderBrush="{StaticResource CardBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
+                    <!-- Network Config Selector / Status (Neumorphic Sunken Capsule) -->
+                    <Border Style="{StaticResource NeumorphicSunkenBorderStyle}"
+                            CornerRadius="10"
                             Padding="8,4"
                             Margin="0,0,10,0"
                             VerticalAlignment="Center">
@@ -130,13 +130,13 @@
                             <Button Content="Switch…"
                                     Command="{Binding SelectSharedConfigCommand}"
                                     Style="{StaticResource SecondaryButtonStyle}"
-                                    Padding="6,2"
+                                    Padding="7,2"
                                     FontSize="10"
                                     ToolTip="Select shared models.json on an office network drive"/>
                             <Button Content="Reset"
                                     Command="{Binding ResetLocalConfigCommand}"
                                     Style="{StaticResource SecondaryButtonStyle}"
-                                    Padding="6,2"
+                                    Padding="7,2"
                                     FontSize="10"
                                     Margin="4,0,0,0"
                                     Visibility="{Binding IsUsingSharedConfig, Converter={StaticResource BoolToVisibility}}"
@@ -144,13 +144,16 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Replication Engine Badge -->
-                    <Border Background="#0A1830"
-                            BorderBrush="#1E3A5F"
-                            BorderThickness="1"
+                    <!-- Replication Engine Badge (Neumorphic Extruded Pill) -->
+                    <Border Background="{StaticResource NeumorphicButtonBrush}"
+                            BorderBrush="{StaticResource NeumorphicButtonBorderBrush}"
+                            BorderThickness="1.2"
                             CornerRadius="14"
                             Padding="12,5"
                             VerticalAlignment="Center">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="6" ShadowDepth="2" Direction="315" Color="#020408" Opacity="0.6"/>
+                        </Border.Effect>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="⬡ " FontSize="10" Foreground="{StaticResource AccentCyanBrush}"/>
                             <TextBlock Text="Tekla Replication Engine"
@@ -178,15 +181,18 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Glowing Target Icon -->
+                    <!-- Glowing Target Icon (Neumorphic Extruded Circle with Glowing Ring) -->
                     <Border Grid.Column="0"
-                            Width="28" Height="28"
-                            CornerRadius="14"
-                            Background="#092038"
+                            Width="32" Height="32"
+                            CornerRadius="16"
+                            Background="{StaticResource NeumorphicButtonBrush}"
                             BorderBrush="{StaticResource AccentCyanBrush}"
                             BorderThickness="1.8"
                             Margin="0,2,12,0"
                             VerticalAlignment="Top">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" ShadowDepth="2" Color="#00F0FF" Opacity="0.4"/>
+                        </Border.Effect>
                         <Ellipse Width="10" Height="10"
                                  Fill="{StaticResource AccentCyanBrush}"
                                  HorizontalAlignment="Center"
@@ -232,18 +238,16 @@
                             Style="{StaticResource PillPresetButtonStyle}"/>
                 </StackPanel>
 
-                <!-- ── COMMON AUTOMATION SERVICES BAR (STACKED) ── -->
-                <Border Background="{StaticResource SurfaceDarkBrush}"
-                        BorderBrush="{StaticResource CardBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="14,9"
-                        Margin="0,10,0,0">
+                <!-- ── COMMON AUTOMATION SERVICES BAR (NEUMORPHIC CARD) ── -->
+                <Border Style="{StaticResource NeumorphicCardBorderStyle}"
+                        CornerRadius="12"
+                        Padding="16,10"
+                        Margin="0,12,0,0">
                     <StackPanel>
                         <!-- Row 1: Auto-Scheduled Backup -->
                         <DockPanel LastChildFill="False">
                             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="⏱" FontSize="13" Foreground="{StaticResource AccentCyanBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="⏱" FontSize="14" Foreground="{StaticResource AccentCyanBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <CheckBox Content="Enable Auto-Scheduled Backup"
                                           IsChecked="{Binding IsAutoBackupEnabled, Mode=TwoWay}"
                                           FontSize="11" FontWeight="SemiBold"
@@ -256,16 +260,14 @@
                                 <ComboBox ItemsSource="{Binding AvailableIntervals}"
                                           SelectedItem="{Binding AutoBackupIntervalMinutes, Mode=TwoWay}"
                                           ItemStringFormat="{}{0} min"
-                                          Width="82" Height="26"
+                                          Width="86" Height="26"
                                           FontSize="11"
                                           VerticalAlignment="Center"
                                           Margin="0,0,12,0"/>
 
-                                <Border Background="#091B33"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="1"
+                                <Border Style="{StaticResource NeumorphicSunkenBorderStyle}"
                                         CornerRadius="12"
-                                        Padding="8,3"
+                                        Padding="10,3"
                                         VerticalAlignment="Center"
                                         Margin="0,0,14,0">
                                     <TextBlock Text="{Binding NextAutoBackupText}"
@@ -289,12 +291,12 @@
                         </DockPanel>
 
                         <!-- Subtle Row Divider -->
-                        <Separator Margin="0,7" Background="{StaticResource BorderColorBrush}" Opacity="0.5"/>
+                        <Separator Margin="0,8" Background="{StaticResource BorderColorBrush}" Opacity="0.4"/>
 
                         <!-- Row 2: Live Incremental Backup -->
                         <DockPanel LastChildFill="False">
                             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="⚡" FontSize="13" Foreground="{StaticResource AccentTealBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="⚡" FontSize="14" Foreground="{StaticResource AccentTealBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <CheckBox Content="Enable Live Incremental Backup"
                                           IsChecked="{Binding IsIncrementalSyncEnabled, Mode=TwoWay}"
                                           FontSize="11" FontWeight="SemiBold"
@@ -307,16 +309,14 @@
                                 <ComboBox ItemsSource="{Binding AvailableIncrementalIntervals}"
                                           SelectedItem="{Binding IncrementalIntervalMinutes, Mode=TwoWay}"
                                           ItemStringFormat="{}{0} min"
-                                          Width="82" Height="26"
+                                          Width="86" Height="26"
                                           FontSize="11"
                                           VerticalAlignment="Center"
                                           Margin="0,0,12,0"/>
 
-                                <Border Background="#091F38"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="1"
+                                <Border Style="{StaticResource NeumorphicSunkenBorderStyle}"
                                         CornerRadius="12"
-                                        Padding="8,3"
+                                        Padding="10,3"
                                         VerticalAlignment="Center"
                                         Margin="0,0,12,0">
                                     <TextBlock Text="{Binding NextIncrementalSyncText}"
@@ -355,14 +355,12 @@
             </Grid.ColumnDefinitions>
 
             <!-- ─────────────────────────────────────────────────────────
-                 LEFT COLUMN: Models Registry Card
+                 LEFT COLUMN: Models Registry Card (Neumorphic Card)
             ──────────────────────────────────────────────────────────── -->
             <Border Grid.Column="0"
-                    Background="{StaticResource CardBrush}"
-                    BorderBrush="{StaticResource CardBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="10"
-                    Margin="16,12,4,10">
+                    Style="{StaticResource NeumorphicCardBorderStyle}"
+                    CornerRadius="14"
+                    Margin="16,12,6,12">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/> <!-- Toolbar -->
@@ -371,11 +369,10 @@
 
                     <!-- Card Toolbar with Search Filter -->
                     <Border Grid.Row="0"
-                            Background="{StaticResource ToolbarBgBrush}"
+                            Background="Transparent"
                             BorderBrush="{StaticResource CardBorderBrush}"
                             BorderThickness="0,0,0,1"
-                            CornerRadius="10,10,0,0"
-                            Padding="12,10">
+                            Padding="14,12">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -383,7 +380,7 @@
                             </Grid.RowDefinitions>
 
                             <!-- Top row: Title and Action Buttons -->
-                            <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,8">
+                            <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,10">
                                 <TextBlock DockPanel.Dock="Left"
                                            Text="TEKLA MODEL REGISTRY"
                                            FontSize="11" FontWeight="Bold"
@@ -410,13 +407,11 @@
                                 </StackPanel>
                             </DockPanel>
 
-                            <!-- Bottom row: Search / Quick Filter Bar -->
+                            <!-- Bottom row: Search / Quick Filter Bar (Neumorphic Sunken Well) -->
                             <Border Grid.Row="1"
-                                    Background="{StaticResource SurfaceDarkBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Padding="8,3">
+                                    Style="{StaticResource NeumorphicSunkenBorderStyle}"
+                                    CornerRadius="8"
+                                    Padding="10,4">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -456,7 +451,7 @@
                                             Content="✕"
                                             Command="{Binding ClearSearchCommand}"
                                             Style="{StaticResource SecondaryButtonStyle}"
-                                            Padding="6,1"
+                                            Padding="6,2"
                                             FontSize="9"
                                             Visibility="{Binding HasSearchText, Converter={StaticResource BoolToVisibility}}"
                                             ToolTip="Clear search filter"/>
@@ -578,27 +573,28 @@
                           Cursor="SizeWE"/>
 
             <!-- ─────────────────────────────────────────────────────────
-                 RIGHT COLUMN: Specifications & Mode Card Controls
+                 RIGHT COLUMN: Specifications & Mode Card Controls (Neumorphic Card)
             ──────────────────────────────────────────────────────────── -->
             <Border Grid.Column="2"
-                    Background="{StaticResource CardBrush}"
-                    BorderBrush="{StaticResource CardBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="10"
-                    Margin="4,12,16,10">
+                    Style="{StaticResource NeumorphicCardBorderStyle}"
+                    CornerRadius="14"
+                    Margin="6,12,16,12">
                 <Grid>
                     <!-- Empty State: No Model Selected -->
                     <StackPanel VerticalAlignment="Center"
                                 HorizontalAlignment="Center"
                                 Visibility="{Binding SelectedModel,
                                              Converter={StaticResource NullToVisibilityInverse}}">
-                        <Border Width="56" Height="56"
-                                CornerRadius="28"
-                                Background="#0A1830"
-                                BorderBrush="{StaticResource CardBorderBrush}"
+                        <Border Width="60" Height="60"
+                                CornerRadius="30"
+                                Background="{StaticResource NeumorphicSunkenBrush}"
+                                BorderBrush="{StaticResource NeumorphicButtonBorderBrush}"
                                 BorderThickness="1.5"
                                 HorizontalAlignment="Center"
-                                Margin="0,0,0,14">
+                                Margin="0,0,0,16">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Direction="315" Color="#020408" Opacity="0.7"/>
+                            </Border.Effect>
                             <TextBlock Text="📋" FontSize="26"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
@@ -619,13 +615,13 @@
 
                     <!-- Active Model Selected -->
                     <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  Padding="18,16"
+                                  Padding="20,18"
                                   Visibility="{Binding SelectedModel,
                                                Converter={StaticResource NullToVisibility}}">
                         <StackPanel>
 
                             <!-- Header: Model Name & Actions -->
-                            <DockPanel LastChildFill="False" Margin="0,0,0,14">
+                            <DockPanel LastChildFill="False" Margin="0,0,0,16">
                                 <TextBlock DockPanel.Dock="Left"
                                            Text="{Binding SelectedModel.Name}"
                                            FontSize="17" FontWeight="Bold"
@@ -654,6 +650,9 @@
                                             CornerRadius="10"
                                             Padding="10,4"
                                             VerticalAlignment="Center">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="8" ShadowDepth="0" Color="#00F0FF" Opacity="0.3"/>
+                                        </Border.Effect>
                                         <TextBlock Text="READY"
                                                    FontSize="10" FontWeight="Bold"
                                                    Foreground="{StaticResource AccentCyanBrush}"/>
@@ -665,13 +664,13 @@
                             <TextBlock Text="REPLICATION MODE (KNOWN TARGETS)"
                                        FontSize="10" FontWeight="Bold"
                                        Foreground="{StaticResource SecondaryTextBrush}"
-                                       Margin="0,0,0,8"/>
+                                       Margin="0,0,0,10"/>
 
-                            <!-- 2-Column Mode Card Grid (Matching screenshot style) -->
+                            <!-- 2-Column Mode Card Grid (Neumorphic Mode Cards) -->
                             <Grid Margin="0,0,0,14">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="10"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
@@ -688,7 +687,7 @@
                                             <Border DockPanel.Dock="Right"
                                                     Background="#102545"
                                                     CornerRadius="4"
-                                                    Padding="4,1">
+                                                    Padding="5,1">
                                                 <TextBlock Text="SYNC" FontSize="9" FontWeight="Bold"
                                                            Foreground="{StaticResource PrimaryLightBrush}"/>
                                             </Border>
@@ -697,7 +696,7 @@
                                                    FontSize="10"
                                                    Foreground="{StaticResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap"
-                                                   Margin="0,4,0,0"/>
+                                                   Margin="0,5,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
 
@@ -714,7 +713,7 @@
                                             <Border DockPanel.Dock="Right"
                                                     Background="#102545"
                                                     CornerRadius="4"
-                                                    Padding="4,1">
+                                                    Padding="5,1">
                                                 <TextBlock Text="REPLICA" FontSize="9" FontWeight="Bold"
                                                            Foreground="{StaticResource PrimaryLightBrush}"/>
                                             </Border>
@@ -723,20 +722,18 @@
                                                    FontSize="10"
                                                    Foreground="{StaticResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap"
-                                                   Margin="0,4,0,0"/>
+                                                   Margin="0,5,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </Grid>
 
-                            <!-- ── SECTION 1B: BACKUP CONFIGURATION & SUFFIX ── -->
-                            <Border Background="{StaticResource SurfaceDarkBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12,10"
+                            <!-- ── SECTION 1B: BACKUP CONFIGURATION & SUFFIX (Neumorphic Sunken Card) ── -->
+                            <Border Style="{StaticResource NeumorphicSunkenBorderStyle}"
+                                    CornerRadius="10"
+                                    Padding="14,12"
                                     Margin="0,0,0,14">
                                 <StackPanel>
-                                    <DockPanel LastChildFill="False" Margin="0,0,0,8">
+                                    <DockPanel LastChildFill="False" Margin="0,0,0,10">
                                         <TextBlock DockPanel.Dock="Left"
                                                    Text="⚙  BACKUP OPTIONS &amp; SUFFIX"
                                                    FontSize="10" FontWeight="Bold"
@@ -752,15 +749,15 @@
                                     <!-- Target Folder Suffix -->
                                     <TextBlock Text="TARGET FOLDER SUFFIX"
                                                Style="{StaticResource FieldLabelStyle}"
-                                               Margin="0,0,0,3"/>
+                                               Margin="0,0,0,4"/>
                                     <TextBox Text="{Binding TargetFolderSuffix, UpdateSourceTrigger=PropertyChanged}"
                                              GotFocus="OnSuffixGotFocus"
                                              LostFocus="OnSuffixLostFocus"
                                              TextChanged="OnSuffixTextChanged"
                                              ToolTip="Suffix appended to the model name folder (e.g. QC, RevA, Backup) to prevent clash with live model"
-                                             Padding="8,6"
+                                             Padding="10,7"
                                              FontSize="11"
-                                             Margin="0,0,0,3"/>
+                                             Margin="0,0,0,4"/>
                                     <TextBlock Text="Suffix is auto-prefixed with '_' and appended after HHmm to avoid clash when live &amp; backup models are open."
                                                FontSize="9"
                                                Foreground="{StaticResource MutedTextBrush}"/>
@@ -772,15 +769,15 @@
                                     Command="{Binding InquireBackupsCommand}"
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     HorizontalAlignment="Stretch"
-                                    Padding="0,8"
-                                    Margin="0,0,0,10"/>
+                                    Padding="0,9"
+                                    Margin="0,0,0,12"/>
 
-                            <!-- ── SECTION 4: ACTION CTA BUTTON ── -->
+                            <!-- ── SECTION 4: ACTION CTA BUTTON (Radiant Neumorphic Button) ── -->
                             <Button Content="▶   EXECUTE MODEL REPLICATION"
                                     Command="{Binding CreateBackupCommand}"
                                     Style="{StaticResource CreateBackupButtonStyle}"
                                     HorizontalAlignment="Stretch"
-                                    Margin="0,4,0,0"/>
+                                    Margin="0,2,0,0"/>
 
                         </StackPanel>
                     </ScrollViewer>
@@ -789,13 +786,12 @@
         </Grid>
 
         <!-- ═══════════════════════════════════════════════════════════════
-             ROW 3: PROGRESS BAR PANEL (Visible only when IsBusy)
+             ROW 3: PROGRESS BAR PANEL (Neumorphic Card - Visible only when IsBusy)
         ════════════════════════════════════════════════════════════════ -->
         <Border Grid.Row="3"
-                Background="{StaticResource CardBrush}"
+                Style="{StaticResource NeumorphicCardBorderStyle}"
                 BorderBrush="{StaticResource AccentCyanBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
+                CornerRadius="10"
                 Margin="16,0,16,8"
                 Padding="16,10"
                 Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}">
@@ -883,13 +879,13 @@
                 Panel.ZIndex="999"
                 Visibility="{Binding IsToastVisible, Converter={StaticResource BoolToVisibility}}">
             <Border.Effect>
-                <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.6" Color="#000000"/>
+                <DropShadowEffect BlurRadius="22" ShadowDepth="6" Direction="315" Opacity="0.85" Color="#020409"/>
             </Border.Effect>
-            <Border Background="#0B162C"
+            <Border Background="{StaticResource NeumorphicCardBrush}"
                     BorderBrush="{StaticResource AccentCyanBrush}"
                     BorderThickness="1.5"
-                    CornerRadius="8"
-                    Padding="14,12">
+                    CornerRadius="12"
+                    Padding="16,14">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -901,7 +897,7 @@
                                Text="🔔"
                                FontSize="18"
                                VerticalAlignment="Top"
-                               Margin="0,0,10,0"/>
+                               Margin="0,0,12,0"/>
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding ToastTitle}"
